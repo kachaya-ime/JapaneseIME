@@ -17,8 +17,7 @@ public class Candidate {
         SYSTEM,
         LEARNING,
         PREDICTION,
-        SUGGESTION,
-        LLM
+        SUGGESTION
     }
 
     /** 候補の種類・由来。 */
@@ -135,8 +134,6 @@ public class Candidate {
                 return " [予測]";
             case SUGGESTION:
                 return " [予]";
-            case LLM:
-                return " [AI]";
             default:
                 return "";
         }

@@ -4,8 +4,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.SystemClock;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -31,7 +29,6 @@ import io.github.kachaya.ime.BuildConfig;
 import io.github.kachaya.ime.InputService;
 import io.github.kachaya.ime.R;
 import io.github.kachaya.ime.SettingsActivity;
-import io.github.kachaya.ime.SettingsActivity.PrefKeys;
 import io.github.kachaya.ime.dictionary.Candidate;
 import io.github.kachaya.ime.dictionary.Dictionary;
 
@@ -101,13 +98,6 @@ public class InputEngine {
 
     /** 複数文節変換の管理オブジェクト。 */
     private final SegmentManager mSegmentManager = new SegmentManager();
-
-    /** LLM (Zenz) 変換機能の有効フラグおよび設定値。 */
-    private boolean mEnableLlmConversion = false;
-    private int mLlmMaxTokens = 16;
-    private float mLlmTemperature = 0.0f;
-    private final ZenzPromptFormatter mZenzFormatter = new ZenzPromptFormatter();
-    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     public SegmentManager getSegmentManager() {
         return mSegmentManager;
@@ -219,18 +209,6 @@ public class InputEngine {
         mShowAnnotation = prefs.getBoolean("show_annotation", true);
 
         mShortcutMap = KeyShortcutManager.loadMappings(prefs);
-
-        mEnableLlmConversion = prefs.getBoolean(PrefKeys.ENABLE_LLM_CONVERSION, false);
-        try {
-            mLlmMaxTokens = Integer.parseInt(prefs.getString(PrefKeys.LLM_MAX_TOKENS, "16"));
-        } catch (Exception ignored) {
-            mLlmMaxTokens = 16;
-        }
-        try {
-            mLlmTemperature = Float.parseFloat(prefs.getString(PrefKeys.LLM_TEMPERATURE, "0.0"));
-        } catch (Exception ignored) {
-            mLlmTemperature = 0.0f;
-        }
 
         logI("readPrefs: useKutenJp =" + useKutenJp);
         logI("readPrefs: useToutenJp =" + useToutenJp);
@@ -1212,14 +1190,6 @@ public class InputEngine {
             if (active != null) {
                 mCandidateList = active.candidates;
                 mCurrentCandidateIndex = active.selectedIndex;
-
-                StringBuilder cands = new StringBuilder();
-                for (int i = 0; i < mCandidateList.size(); i++) {
-                    if (i > 0) cands.append(", ");
-                    cands.append(mCandidateList.get(i).candidate);
-                }
-                Log.i("InputEngine", "[Final Candidates] " + cands.toString());
-
                 updateCandidates();
                 updateFloatingCandidates();
                 updateComposingText();
@@ -1302,12 +1272,8 @@ public class InputEngine {
     private boolean conversionStartInternal(boolean lastCandidate) {
         String query = mComposingBuffer.getSearchQuery();
 
-        boolean useLlmSingleSegment = mEnableLlmConversion
-                && LlamaBridge.isLibraryLoaded()
-                && LlamaBridge.getInstance().isModelLoaded();
-
         List<Segment> segments = new ArrayList<>();
-        if (!useLlmSingleSegment && mViterbiDecoder != null) {
+        if (mViterbiDecoder != null) {
             try {
                 List<Candidate> viterbiCands = mViterbiDecoder.decode(query, null);
                 if (viterbiCands != null && !viterbiCands.isEmpty() && viterbiCands.get(0).viterbiPathNode != null) {
@@ -1348,16 +1314,8 @@ public class InputEngine {
 
         mSegmentManager.setSegments(segments);
 
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < segments.size(); i++) {
-            if (i > 0) sb.append(" | ");
-            sb.append(segments.get(i).reading);
-        }
-        Log.i("InputEngine", "[Segment Analysis] " + sb.toString());
-
         changeState(InputStateConverting.INSTANCE);
         syncActiveSegment();
-        requestLlmCandidatesForConversion(query);
         return true;
     }
 
@@ -1563,163 +1521,6 @@ public class InputEngine {
             mService.setCandidateObjects(mCandidateList);
             updateFloatingCandidates();
         }
-        requestLlmCandidatesForSuggestion(query);
-    }
-
-    private void requestLlmCandidatesForConversion(final String query) {
-        if (!mEnableLlmConversion || !LlamaBridge.isLibraryLoaded() || !LlamaBridge.getInstance().isModelLoaded()) {
-            return;
-        }
-        if (query == null || query.trim().isEmpty()) {
-            return;
-        }
-
-        String prompt = mZenzFormatter.buildPrompt(query);
-        LlamaBridge.getInstance().generateAsync(prompt, mLlmMaxTokens, mLlmTemperature, new LlamaBridge.InferenceCallback() {
-            @Override
-            public void onSuccess(String result) {
-                List<String> rawCandidates = mZenzFormatter.extractCandidates(result);
-                Log.i("InputEngine", "[LLM Output] Raw=\"" + result + "\" -> Extracted=" + rawCandidates);
-                if (rawCandidates == null || rawCandidates.isEmpty()) return;
-
-                mHandler.post(() -> {
-                    if (!mState.isConverting()) return;
-                    String currentQuery = mComposingBuffer.getSearchQuery();
-                    if (!query.equals(currentQuery)) return;
-
-                    if (!mSegmentManager.hasSegments()) return;
-
-                    List<Segment> currentSegments = mSegmentManager.getSegments();
-                    if (currentSegments.size() > 1) {
-                        String viterbiFullText = mSegmentManager.getMultiSegmentText();
-
-                        Set<String> seen = new HashSet<>();
-                        List<Candidate> mergedCandidates = new ArrayList<>();
-
-                        for (String text : rawCandidates) {
-                            if (text != null && !text.isEmpty() && seen.add(text)) {
-                                mergedCandidates.add(new Candidate(text, text).setType(Candidate.Type.LLM));
-                            }
-                        }
-
-                        if (viterbiFullText != null && !viterbiFullText.isEmpty() && seen.add(viterbiFullText)) {
-                            mergedCandidates.add(new Candidate(viterbiFullText, viterbiFullText));
-                        }
-
-                        String hiragana = mMode.convertText(query).toString();
-                        if (hiragana != null && !hiragana.isEmpty() && seen.add(hiragana)) {
-                            mergedCandidates.add(new Candidate(hiragana, hiragana));
-                        }
-                        String katakana = RomajiConverter.toWideKatakana(hiragana != null ? hiragana : query);
-                        if (katakana != null && !katakana.isEmpty() && seen.add(katakana)) {
-                            mergedCandidates.add(new Candidate(katakana, katakana));
-                        }
-
-                        Segment singleSegment = new Segment(query, mergedCandidates, 0);
-                        mSegmentManager.setSegments(Collections.singletonList(singleSegment));
-                        syncActiveSegment();
-                    } else {
-                        Segment active = mSegmentManager.getActiveSegment();
-                        if (active != null && active.candidates != null) {
-                            Set<String> seen = new HashSet<>();
-                            for (Candidate c : active.candidates) {
-                                seen.add(c.candidate);
-                            }
-
-                            List<Candidate> updated = new ArrayList<>(active.candidates);
-                            int insertIndex = 0;
-                            for (int i = 0; i < updated.size(); i++) {
-                                if (updated.get(i).isLearningWord()) {
-                                    insertIndex = i + 1;
-                                }
-                            }
-
-                            boolean added = false;
-                            for (String text : rawCandidates) {
-                                if (text != null && !text.isEmpty() && seen.add(text)) {
-                                    updated.add(insertIndex, new Candidate(text, text).setType(Candidate.Type.LLM));
-                                    insertIndex++;
-                                    added = true;
-                                }
-                            }
-
-                            if (added) {
-                                active.candidates = updated;
-                                mCandidateList = updated;
-                                updateCandidates();
-                            }
-                        }
-                    }
-                });
-            }
-
-            @Override
-            public void onError(Exception e) {
-                Log.e("InputEngine", "LLM conversion error", e);
-            }
-        });
-    }
-
-    private void requestLlmCandidatesForSuggestion(final String query) {
-        if (!mEnableLlmConversion || !LlamaBridge.isLibraryLoaded() || !LlamaBridge.getInstance().isModelLoaded()) {
-            return;
-        }
-
-        String prompt;
-        if (mLastCommittedCandidate != null && !mLastCommittedCandidate.isEmpty()) {
-            prompt = mZenzFormatter.buildPredictivePrompt(mLastCommittedCandidate);
-        } else if (query != null && !query.trim().isEmpty()) {
-            prompt = mZenzFormatter.buildPrompt(query);
-        } else {
-            return;
-        }
-
-        LlamaBridge.getInstance().generateAsync(prompt, mLlmMaxTokens, mLlmTemperature, new LlamaBridge.InferenceCallback() {
-            @Override
-            public void onSuccess(String result) {
-                List<String> rawCandidates = mZenzFormatter.extractCandidates(result);
-                if (rawCandidates == null || rawCandidates.isEmpty()) return;
-
-                mHandler.post(() -> {
-                    if (mState.isConverting()) return;
-
-                    Set<String> seen = new HashSet<>();
-                    for (Candidate c : mCandidateList) {
-                        seen.add(c.candidate);
-                    }
-
-                    List<Candidate> updated = new ArrayList<>(mCandidateList);
-                    int insertIndex = 0;
-                    for (int i = 0; i < updated.size(); i++) {
-                        if (updated.get(i).isLearningWord() || updated.get(i).isPrediction()) {
-                            insertIndex = i + 1;
-                        }
-                    }
-
-                    boolean added = false;
-                    for (String text : rawCandidates) {
-                        if (text != null && !text.isEmpty() && seen.add(text)) {
-                            updated.add(insertIndex, new Candidate(text, text).setType(Candidate.Type.LLM));
-                            insertIndex++;
-                            added = true;
-                        }
-                    }
-
-                    if (added) {
-                        mCandidateList = updated;
-                        if (mService != null) {
-                            mService.setCandidateObjects(mCandidateList);
-                            updateFloatingCandidates();
-                        }
-                    }
-                });
-            }
-
-            @Override
-            public void onError(Exception e) {
-                Log.e("InputEngine", "LLM suggestion error", e);
-            }
-        });
     }
 
     /**

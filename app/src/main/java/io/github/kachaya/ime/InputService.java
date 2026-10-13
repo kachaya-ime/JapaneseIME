@@ -34,8 +34,6 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.preference.PreferenceManager;
 
-import io.github.kachaya.ime.engine.LlamaBridge;
-
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -428,7 +426,6 @@ public class InputService extends InputMethodService implements SharedPreference
         if (mDictionary != null) {
             mDictionary.close();
         }
-        LlamaBridge.getInstance().close();
         super.onDestroy();
     }
 
@@ -784,22 +781,6 @@ public class InputService extends InputMethodService implements SharedPreference
         // エンジン側の設定を更新
         if (mEngine != null) {
             mEngine.readPrefs();
-        }
-
-        boolean enableLlm = prefs.getBoolean(PrefKeys.ENABLE_LLM_CONVERSION, false);
-        String modelPath = prefs.getString(PrefKeys.LLM_MODEL_PATH, "");
-        if (enableLlm && modelPath != null && !modelPath.trim().isEmpty()) {
-            int threads = 4;
-            try {
-                threads = Integer.parseInt(prefs.getString(PrefKeys.LLM_THREADS, "4"));
-            } catch (Exception ignored) {}
-            int ctx = 512;
-            try {
-                ctx = Integer.parseInt(prefs.getString(PrefKeys.LLM_CONTEXT_SIZE, "512"));
-            } catch (Exception ignored) {}
-            LlamaBridge.getInstance().init(this, modelPath, threads, ctx);
-        } else {
-            LlamaBridge.getInstance().close();
         }
 
         // UI（InputView）側の設定もここで統合して更新
