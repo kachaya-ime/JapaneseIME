@@ -17,7 +17,8 @@ public class Candidate {
         SYSTEM,
         LEARNING,
         PREDICTION,
-        SUGGESTION
+        SUGGESTION,
+        ZENZ
     }
 
     /** 候補の種類・由来。 */
@@ -61,6 +62,9 @@ public class Candidate {
         return type == Type.PREDICTION;
     }
 
+    /** 注釈（アノテーション）情報。 */
+    public String annotation;
+
     /**
      * 補完候補であるかどうかを判定します。
      *
@@ -68,6 +72,26 @@ public class Candidate {
      */
     public boolean isSuggestion() {
         return type == Type.SUGGESTION;
+    }
+
+    /**
+     * Zenz LLM 変換候補であるかどうかを判定します。
+     *
+     * @return Zenz 候補の場合は true
+     */
+    public boolean isZenz() {
+        return type == Type.ZENZ;
+    }
+
+    /**
+     * 注釈情報（annotation）を設定します。
+     *
+     * @param annotation 注釈文字列
+     * @return このインスタンス自身
+     */
+    public Candidate setAnnotation(String annotation) {
+        this.annotation = annotation;
+        return this;
     }
 
     /**
@@ -134,6 +158,8 @@ public class Candidate {
                 return " [予測]";
             case SUGGESTION:
                 return " [予]";
+            case ZENZ:
+                return " [Zenz]";
             default:
                 return "";
         }

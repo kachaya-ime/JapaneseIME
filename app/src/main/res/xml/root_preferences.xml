@@ -435,6 +435,53 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:title="Zenz LLM 変換設定 (llama.cpp)"
+        app:iconSpaceReserved="false"
+        >
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="zenz_enabled"
+            android:summaryOff="llama.cpp による Zenz LLM かna漢字変換が無効です"
+            android:summaryOn="llama.cpp による Zenz LLM かな漢字変換が有効です"
+            android:title="Zenz LLM 変換を有効にする"
+            />
+        <Preference
+            android:key="zenz_model_select"
+            android:summary="未設定 (タップして .gguf モデルファイルを選択)"
+            android:title="GGUF モデルファイルの選択"
+            />
+        <ListPreference
+            android:defaultValue="4"
+            android:entries="@array/zenz_thread_entries"
+            android:entryValues="@array/zenz_thread_values"
+            android:key="zenz_threads"
+            android:title="CPU スレッド数"
+            app:useSimpleSummaryProvider="true"
+            />
+        <ListPreference
+            android:defaultValue="512"
+            android:entries="@array/zenz_ctx_entries"
+            android:entryValues="@array/zenz_ctx_values"
+            android:key="zenz_ctx_size"
+            android:title="コンテキストサイズ (n_ctx)"
+            app:useSimpleSummaryProvider="true"
+            />
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="zenz_use_context"
+            android:summaryOff="前文のテキストを参照せずに単体で変換します"
+            android:summaryOn="カーソル位置の直前テキストを変換文脈として参照します"
+            android:title="左文脈（前文）を参照する"
+            />
+        <EditTextPreference
+            android:defaultValue="0.0"
+            android:key="zenz_temperature"
+            android:summary="0.0 (Greedy Decoding)"
+            android:title="Temperature (サンプリング温度)"
+            />
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="アプリ情報"
         app:iconSpaceReserved="false"
         >

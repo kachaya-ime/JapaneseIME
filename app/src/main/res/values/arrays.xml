@@ -102,4 +102,32 @@
         <item>32</item>
     </string-array>
 
+    <string-array name="zenz_thread_entries">
+        <item>1 スレッド</item>
+        <item>2 スレッド</item>
+        <item>4 スレッド (推奨)</item>
+        <item>6 スレッド</item>
+        <item>8 スレッド</item>
+    </string-array>
+    <string-array name="zenz_thread_values">
+        <item>1</item>
+        <item>2</item>
+        <item>4</item>
+        <item>6</item>
+        <item>8</item>
+    </string-array>
+
+    <string-array name="zenz_ctx_entries">
+        <item>256</item>
+        <item>512 (標準)</item>
+        <item>1024</item>
+        <item>2048</item>
+    </string-array>
+    <string-array name="zenz_ctx_values">
+        <item>256</item>
+        <item>512</item>
+        <item>1024</item>
+        <item>2048</item>
+    </string-array>
+
 </resources>

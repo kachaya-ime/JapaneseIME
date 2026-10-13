@@ -426,6 +426,9 @@ public class InputService extends InputMethodService implements SharedPreference
         if (mDictionary != null) {
             mDictionary.close();
         }
+        if (mEngine != null && mEngine.getZenzEngine() != null) {
+            mEngine.getZenzEngine().release();
+        }
         super.onDestroy();
     }
 
@@ -1349,6 +1352,19 @@ public class InputService extends InputMethodService implements SharedPreference
      */
     public void pickCandidateViewManually(int index) {
         mEngine.pickCandidateViewManually(index);
+    }
+
+    /**
+     * カーソル直前のテキストを取得します。
+     *
+     * @param maxChars 取得する最大文字数
+     * @return カーソル直前の文字列（取得できない場合は空文字列）
+     */
+    public String getTextBeforeCursor(int maxChars) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return "";
+        CharSequence cs = ic.getTextBeforeCursor(maxChars, 0);
+        return cs != null ? cs.toString() : "";
     }
 
     /**

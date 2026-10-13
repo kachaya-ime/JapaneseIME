@@ -31,6 +31,7 @@ import io.github.kachaya.ime.R;
 import io.github.kachaya.ime.SettingsActivity;
 import io.github.kachaya.ime.dictionary.Candidate;
 import io.github.kachaya.ime.dictionary.Dictionary;
+import io.github.kachaya.ime.zenz.ZenzEngine;
 
 /**
  * 入力・変換ロジックを統括するエンジンクラスです。
@@ -131,6 +132,17 @@ public class InputEngine {
         return mContext;
     }
 
+    /** Zenz (llama.cpp) かな漢字変換LLMエンジン。 */
+    private final ZenzEngine mZenzEngine;
+
+    public ZenzEngine getZenzEngine() {
+        return mZenzEngine;
+    }
+
+    public boolean isZenzActive() {
+        return mZenzEngine != null && mZenzEngine.isEnabled();
+    }
+
     /**
      * InputEngine を構築します。
      *
@@ -142,6 +154,7 @@ public class InputEngine {
         mService = (context instanceof InputService) ? (InputService) context : null;
         mDictionary = dictionary;
         mViterbiDecoder = new ViterbiDecoder(mDictionary, 20);
+        mZenzEngine = new ZenzEngine(context);
 
         mFullWidthSeparatorMap = new HashMap<>();
         mFullWidthSeparatorMap.put(".", "。");
@@ -209,6 +222,10 @@ public class InputEngine {
         mShowAnnotation = prefs.getBoolean("show_annotation", true);
 
         mShortcutMap = KeyShortcutManager.loadMappings(prefs);
+
+        if (mZenzEngine != null) {
+            mZenzEngine.reloadPreferences(prefs);
+        }
 
         logI("readPrefs: useKutenJp =" + useKutenJp);
         logI("readPrefs: useToutenJp =" + useToutenJp);
@@ -1121,7 +1138,7 @@ public class InputEngine {
     public List<Candidate> getSegmentCandidates(String segmentReading, String preferredSurface) {
         List<Candidate> rawCands = new ArrayList<>();
 
-        if (mViterbiDecoder != null) {
+        if (!isZenzActive() && mViterbiDecoder != null) {
             try {
                 List<Candidate> viterbiCands = mViterbiDecoder.decode(segmentReading, null);
                 if (viterbiCands != null) {
@@ -1273,7 +1290,7 @@ public class InputEngine {
         String query = mComposingBuffer.getSearchQuery();
 
         List<Segment> segments = new ArrayList<>();
-        if (mViterbiDecoder != null) {
+        if (!isZenzActive() && mViterbiDecoder != null) {
             try {
                 List<Candidate> viterbiCands = mViterbiDecoder.decode(query, null);
                 if (viterbiCands != null && !viterbiCands.isEmpty() && viterbiCands.get(0).viterbiPathNode != null) {
@@ -1316,6 +1333,42 @@ public class InputEngine {
 
         changeState(InputStateConverting.INSTANCE);
         syncActiveSegment();
+
+        if (mZenzEngine != null && mZenzEngine.isEnabled()) {
+            String fullLeftContext = mService != null ? mService.getTextBeforeCursor(20) : "";
+            CharSequence composingCs = mComposingBuffer.getComposingText();
+            String composingText = composingCs != null ? composingCs.toString() : "";
+            if (!composingText.isEmpty() && fullLeftContext.endsWith(composingText)) {
+                fullLeftContext = fullLeftContext.substring(0, fullLeftContext.length() - composingText.length());
+            }
+
+            final String leftContext = fullLeftContext;
+            mZenzEngine.convertAsync(query, leftContext, zenzCands -> {
+                if (zenzCands != null && !zenzCands.isEmpty() && mState.isConverting()) {
+                    Segment active = mSegmentManager.getActiveSegment();
+                    if (active != null) {
+                        List<Candidate> currentCands = active.candidates;
+                        List<Candidate> newCands = new ArrayList<>();
+                        Set<String> seen = new HashSet<>();
+                        for (Candidate zc : zenzCands) {
+                            if (seen.add(zc.candidate)) {
+                                newCands.add(zc);
+                            }
+                        }
+                        for (Candidate c : currentCands) {
+                            if (seen.add(c.candidate)) {
+                                newCands.add(c);
+                            }
+                        }
+                        mCandidateList = newCands;
+                        active.candidates = newCands;
+                        updateCandidates();
+                        updateFloatingCandidates();
+                    }
+                }
+            });
+        }
+
         return true;
     }
 
@@ -1451,7 +1504,7 @@ public class InputEngine {
         String query = mComposingBuffer.getComposingTextString();
         List<Candidate> rawCandidates = new ArrayList<>();
 
-        if (mViterbiDecoder != null) {
+        if (!isZenzActive() && mViterbiDecoder != null) {
             try {
                 List<Candidate> viterbiCands = mViterbiDecoder.decode(query, null);
                 if (viterbiCands != null) {
@@ -1595,7 +1648,7 @@ public class InputEngine {
                 if (mEnableLearning) {
                     for (Segment seg : segments) {
                         Candidate selected = seg.getSelectedCandidate();
-                        if (selected != null && !selected.isSuggestion() && !selected.isPrediction() && selected.rawCandidate != null) {
+                        if (selected != null && !selected.isSuggestion() && !selected.isPrediction() && !selected.isZenz() && selected.rawCandidate != null) {
                             logI("Learning segment: key=" + seg.reading + ", cand=" + selected.rawCandidate);
                             mDictionary.addEntry(seg.reading, selected.rawCandidate, selected.getPosId(), selected.getCost());
                         }
@@ -1650,14 +1703,14 @@ public class InputEngine {
 
         String key = mComposingBuffer.getSearchQuery();
 
-        if (mEnableLearning && !c.isSuggestion() && !c.isPrediction() && c.rawCandidate != null) {
+        if (mEnableLearning && !c.isSuggestion() && !c.isPrediction() && !c.isZenz() && c.rawCandidate != null) {
             logI("Learning: key=" + key + ", cand=" + c.rawCandidate);
             if (mLastCommittedCandidate != null) {
                 mDictionary.learnTransition(mLastCommittedCandidate, finalCandidate.toString());
             }
             mDictionary.addEntry(key, c.rawCandidate, c.getPosId(), c.getCost());
         } else {
-            logI("Skip learning: enable=" + mEnableLearning + ", suggestion/prediction=" + (c.isSuggestion() || c.isPrediction()) + ", raw=" + (c.rawCandidate != null));
+            logI("Skip learning: enable=" + mEnableLearning + ", suggestion/prediction/zenz=" + (c.isSuggestion() || c.isPrediction() || c.isZenz()) + ", raw=" + (c.rawCandidate != null));
         }
 
         mLastCommittedCandidate = finalCandidate.toString();

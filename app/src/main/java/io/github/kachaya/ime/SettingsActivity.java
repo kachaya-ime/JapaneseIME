@@ -28,6 +28,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -36,10 +38,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.Executors;
 
 import io.github.kachaya.ime.keyboard.KeyConfig;
 import io.github.kachaya.ime.keyboard.LayoutManager;
 import io.github.kachaya.ime.keyboard.PhysicalKeyBinding;
+import io.github.kachaya.ime.zenz.ZenzEngine;
 
 /**
  * 日本語入力の動作設定やカスタマイズを行うための設定画面アクティビティです。
@@ -60,6 +64,84 @@ public class SettingsActivity extends AppCompatActivity {
             new ActivityResultContracts.OpenDocument(),
             this::restoreSettings
     );
+
+    /** GGUF モデルファイルを選択するための ActivityResultLauncher。 */
+    private final ActivityResultLauncher<String[]> mModelPickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.OpenDocument(),
+            this::onModelPicked
+    );
+
+    public void showModelSelectionOptions() {
+        String[] options = {"ファイル選択ダイアログから開く (.gguf)", "ファイルパスを直接入力"};
+        new AlertDialog.Builder(this)
+                .setTitle("GGUF モデルファイルの指定")
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) {
+                        mModelPickerLauncher.launch(new String[]{"*/*"});
+                    } else if (which == 1) {
+                        showDirectPathInputDialog();
+                    }
+                })
+                .show();
+    }
+
+    private void showDirectPathInputDialog() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        String currentPath = prefs.getString(ZenzEngine.PREF_KEY_ZENZ_MODEL_PATH, "");
+
+        final android.widget.EditText input = new android.widget.EditText(this);
+        input.setText(currentPath);
+        input.setHint("/sdcard/Download/zenz-v1.gguf");
+
+        new AlertDialog.Builder(this)
+                .setTitle("モデルファイルパスの入力")
+                .setView(input)
+                .setPositiveButton("設定", (dialog, which) -> {
+                    String path = input.getText().toString().trim();
+                    if (!path.isEmpty()) {
+                        prefs.edit().putString(ZenzEngine.PREF_KEY_ZENZ_MODEL_PATH, path).apply();
+                        Toast.makeText(this, "モデルパスを設定しました: " + path, Toast.LENGTH_SHORT).show();
+                        SettingsFragment fragment = (SettingsFragment) getSupportFragmentManager().findFragmentById(R.id.settings);
+                        if (fragment != null) {
+                            fragment.updateZenzModelSummary();
+                        }
+                    }
+                })
+                .setNegativeButton("キャンセル", null)
+                .show();
+    }
+
+    private void onModelPicked(Uri uri) {
+        if (uri == null) return;
+        Toast.makeText(this, "モデルファイルを読み込み中...", Toast.LENGTH_SHORT).show();
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                File targetFile = new File(getFilesDir(), "zenz_model.gguf");
+                try (InputStream is = getContentResolver().openInputStream(uri);
+                     OutputStream os = new FileOutputStream(targetFile)) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        os.write(buffer, 0, bytesRead);
+                    }
+                }
+                String absolutePath = targetFile.getAbsolutePath();
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+                prefs.edit().putString(ZenzEngine.PREF_KEY_ZENZ_MODEL_PATH, absolutePath).apply();
+
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "モデルを保存・設定しました: " + targetFile.getName(), Toast.LENGTH_LONG).show();
+                    SettingsFragment fragment = (SettingsFragment) getSupportFragmentManager().findFragmentById(R.id.settings);
+                    if (fragment != null) {
+                        fragment.updateZenzModelSummary();
+                    }
+                });
+            } catch (Exception e) {
+                Log.e("SettingsActivity", "Error copying model file", e);
+                runOnUiThread(() -> Toast.makeText(this, "モデルファイルの読み込みに失敗しました", Toast.LENGTH_LONG).show());
+            }
+        });
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -108,6 +190,18 @@ public class SettingsActivity extends AppCompatActivity {
             }
 
             updateKeyPrefEnabledState();
+
+            updateZenzModelSummary();
+
+            Preference zenzModelPref = findPreference("zenz_model_select");
+            if (zenzModelPref != null) {
+                zenzModelPref.setOnPreferenceClickListener(preference -> {
+                    if (getActivity() instanceof SettingsActivity) {
+                        ((SettingsActivity) getActivity()).showModelSelectionOptions();
+                    }
+                    return true;
+                });
+            }
 
             Preference legalInfoPref = findPreference("legal_info");
             if (legalInfoPref != null) {
@@ -165,6 +259,20 @@ public class SettingsActivity extends AppCompatActivity {
                             .show();
                     return true;
                 });
+            }
+        }
+
+        public void updateZenzModelSummary() {
+            Preference zenzModelPref = findPreference("zenz_model_select");
+            if (zenzModelPref != null && getContext() != null) {
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+                String path = prefs.getString(ZenzEngine.PREF_KEY_ZENZ_MODEL_PATH, "");
+                if (path.isEmpty()) {
+                    zenzModelPref.setSummary("未設定 (タップして .gguf モデルファイルを選択)");
+                } else {
+                    File f = new File(path);
+                    zenzModelPref.setSummary(f.getName() + "\n(" + path + ")");
+                }
             }
         }
 
