@@ -1,0 +1,24 @@
+[
+  [
+    { "label": "Esc", "code": "ESC" },
+    { "label": "{" },
+    { "label": "}" },
+    { "label": "<" },
+    { "label": ">" },
+    { "label": "[" },
+    { "label": "]" },
+    { "label": ";" },
+    { "label": "=" }
+  ],
+  [
+    { "label": "Esc", "code": "ESC" },
+    { "label": "~" },
+    { "label": "`" },
+    { "label": "^" },
+    { "label": "|" },
+    { "label": "\\" },
+    { "label": "%" },
+    { "label": "&" },
+    { "label": "$" }
+  ]
+]

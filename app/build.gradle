@@ -1,0 +1,73 @@
+plugins {
+    alias(libs.plugins.android.application)
+}
+
+android {
+    namespace 'io.github.kachaya.ime'
+    compileSdk 37
+
+    defaultConfig {
+        applicationId "io.github.kachaya.ime"
+        minSdk 25
+        targetSdk 37
+        versionCode 10000
+        versionName "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // Modern way to change APK name using Variant API
+    androidComponents {
+        onVariants(selector().all(), { variant ->
+            variant.outputs.forEach { output ->
+                def projectName = "JapaneseIME"
+                def versionName = variant.outputs.first().versionName.getOrElse("1.0.0")
+                output.outputFileName.set("${projectName}-${versionName}.apk")
+            }
+        })
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        disable 'ExpiredTargetSdkVersion'
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    buildFeatures {
+        buildConfig true
+        resValues true
+    }
+    compileSdkMinor 0
+}
+
+dependencies {
+    coreLibraryDesugaring libs.desugar.jdk.libs
+    implementation libs.appcompat
+    implementation libs.material
+    implementation libs.preference
+    implementation libs.activity
+    implementation libs.constraintlayout
+    implementation libs.flexbox
+    implementation libs.recyclerview
+    implementation libs.viewpager2
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+}

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <queries>
+        <intent>
+            <action android:name="android.settings.HARD_KEYBOARD_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.KEYBOARD_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.INPUT_METHOD_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.INPUT_METHOD_AND_LANGUAGE_SETTINGS" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.DayNight.DarkActionBar">
+        <activity
+            android:name=".LearningDictionaryTool"
+            android:exported="false"
+            android:label="@string/title_dictionary_tool">
+        </activity>
+        <activity
+            android:name=".PredictionDictionaryTool"
+            android:exported="false"
+            android:label="予測辞書ツール">
+        </activity>
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:label="@string/title_activity_settings">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".keyboard.KeyboardCustomizerActivity"
+            android:exported="false"
+            android:label="キー配列のカスタマイズ">
+        </activity>
+        <activity
+            android:name=".ShortcutActivity"
+            android:exported="false"
+            android:label="ショートカットキーの設定">
+        </activity>
+
+        <service
+            android:name=".InputService"
+            android:exported="true"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method">
+            </meta-data>
+        </service>
+
+        <receiver android:name=".InputService$InputDeviceReceiver"
+            android:label="@string/app_name"
+            android:exported="true"
+            tools:ignore="MissingClass">
+            <intent-filter>
+                <action android:name="android.hardware.input.action.QUERY_KEYBOARD_LAYOUTS" />
+            </intent-filter>
+            <meta-data android:name="android.hardware.input.metadata.KEYBOARD_LAYOUTS"
+                android:resource="@xml/keyboard_layouts" />
+        </receiver>
+
+    </application>
+</manifest>
