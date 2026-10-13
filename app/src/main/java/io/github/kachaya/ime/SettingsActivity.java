@@ -37,6 +37,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
 
+import io.github.kachaya.ime.engine.LlamaBridge;
 import io.github.kachaya.ime.keyboard.KeyConfig;
 import io.github.kachaya.ime.keyboard.LayoutManager;
 import io.github.kachaya.ime.keyboard.PhysicalKeyBinding;
@@ -59,6 +60,33 @@ public class SettingsActivity extends AppCompatActivity {
     private final ActivityResultLauncher<String[]> mRestoreLauncher = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
             this::restoreSettings
+    );
+
+    /** LLM モデルファイル (.gguf) を選択するための ActivityResultLauncher。 */
+    private final ActivityResultLauncher<String[]> mModelPickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.OpenDocument(),
+            uri -> {
+                if (uri != null) {
+                    try {
+                        getContentResolver().takePersistableUriPermission(
+                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        );
+                    } catch (Exception e) {
+                        Log.w("SettingsActivity", "Failed to take persistable URI permission", e);
+                    }
+                    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+                    prefs.edit().putString(PrefKeys.LLM_MODEL_PATH, uri.toString()).apply();
+                    Toast.makeText(this, "LLMモデルを選択しました", Toast.LENGTH_SHORT).show();
+
+                    boolean enabled = prefs.getBoolean(PrefKeys.ENABLE_LLM_CONVERSION, false);
+                    if (enabled) {
+                        int threads = Integer.parseInt(prefs.getString(PrefKeys.LLM_THREADS, "4"));
+                        int ctx = Integer.parseInt(prefs.getString(PrefKeys.LLM_CONTEXT_SIZE, "512"));
+                        LlamaBridge.getInstance().init(this, uri.toString(), threads, ctx);
+                    }
+                    recreate();
+                }
+            }
     );
 
     @Override
@@ -140,6 +168,23 @@ public class SettingsActivity extends AppCompatActivity {
                 restorePref.setOnPreferenceClickListener(preference -> {
                     if (getActivity() instanceof SettingsActivity) {
                         ((SettingsActivity) getActivity()).mRestoreLauncher.launch(new String[]{"application/json", "text/plain"});
+                    }
+                    return true;
+                });
+            }
+
+            Preference modelPathPref = findPreference(PrefKeys.LLM_MODEL_PATH);
+            if (modelPathPref != null) {
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+                String modelPath = prefs.getString(PrefKeys.LLM_MODEL_PATH, "");
+                if (modelPath == null || modelPath.isEmpty()) {
+                    modelPathPref.setSummary("タップして GGUF モデルファイル (.gguf) を選択してください");
+                } else {
+                    modelPathPref.setSummary(modelPath);
+                }
+                modelPathPref.setOnPreferenceClickListener(preference -> {
+                    if (getActivity() instanceof SettingsActivity) {
+                        ((SettingsActivity) getActivity()).mModelPickerLauncher.launch(new String[]{"*/*"});
                     }
                     return true;
                 });
@@ -435,5 +480,13 @@ public class SettingsActivity extends AppCompatActivity {
         public static final String KEYBOARD_HEIGHT_SCALE = "keyboard_height_scale";
         public static final String CANDIDATE_HEIGHT_SCALE = "candidate_height_scale";
         public static final String CANDIDATE_FONT_SIZE = "candidate_font_size";
+
+        // --- LLM (Zenz) 設定キー ---
+        public static final String ENABLE_LLM_CONVERSION = "enable_llm_conversion";
+        public static final String LLM_MODEL_PATH = "llm_model_path";
+        public static final String LLM_THREADS = "llm_threads";
+        public static final String LLM_CONTEXT_SIZE = "llm_context_size";
+        public static final String LLM_MAX_TOKENS = "llm_max_tokens";
+        public static final String LLM_TEMPERATURE = "llm_temperature";
     }
 }

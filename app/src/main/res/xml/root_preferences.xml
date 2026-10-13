@@ -414,6 +414,47 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:title="Zenz (LLM) AI 変換設定"
+        app:iconSpaceReserved="false"
+        >
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="enable_llm_conversion"
+            android:summary="Zenz LLMモデルを使用したAIかな漢字変換・予測機能を有効にします"
+            android:title="Zenz (LLM) 変換を有効化"
+            />
+        <Preference
+            android:key="llm_model_path"
+            android:summary="タップして GGUF モデルファイル (.gguf) を選択してください"
+            android:title="LLMモデルファイル (.gguf)"
+            />
+        <ListPreference
+            android:defaultValue="4"
+            android:entries="@array/llm_threads_entries"
+            android:entryValues="@array/llm_threads_values"
+            android:key="llm_threads"
+            android:title="推論スレッド数"
+            app:useSimpleSummaryProvider="true"
+            />
+        <ListPreference
+            android:defaultValue="512"
+            android:entries="@array/llm_ctx_entries"
+            android:entryValues="@array/llm_ctx_values"
+            android:key="llm_context_size"
+            android:title="コンテキストサイズ"
+            app:useSimpleSummaryProvider="true"
+            />
+        <ListPreference
+            android:defaultValue="16"
+            android:entries="@array/llm_max_tokens_entries"
+            android:entryValues="@array/llm_max_tokens_values"
+            android:key="llm_max_tokens"
+            android:title="生成トークン数上限"
+            app:useSimpleSummaryProvider="true"
+            />
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="バックアップ・復元"
         app:iconSpaceReserved="false"
         >
