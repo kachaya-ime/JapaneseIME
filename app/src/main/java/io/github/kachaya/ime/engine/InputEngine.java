@@ -1351,29 +1351,50 @@ public class InputEngine {
             }
 
             final String leftContext = fullLeftContext;
-            mZenzEngine.convertAsync(query, leftContext, zenzCands -> {
-                if (zenzCands != null && !zenzCands.isEmpty() && mState.isConverting()) {
+            // 新しい ConversionCallback インターフェース（逐次追加対応）に適合
+            mZenzEngine.convertAsync(query, leftContext, new ZenzEngine.ConversionCallback() {
+                @Override
+                public void onCandidateAvailable(Candidate zenzCandidate) {
+                    if (!mState.isConverting()) return;
+
                     Segment active = mSegmentManager.getActiveSegment();
                     if (active != null) {
                         List<Candidate> currentCands = active.candidates;
                         List<Candidate> newCands = new ArrayList<>();
-                        Set<String> seen = new HashSet<>();
-                        for (Candidate zc : zenzCands) {
-                            if (seen.add(zc.candidate)) {
-                                newCands.add(zc);
-                            }
-                        }
+                        Set<String> seen = new java.util.HashSet<>();
+
+                        // 1. 届いた Zenz 候補を最優先で追加し、重複管理に登録
+                        newCands.add(zenzCandidate);
+                        seen.add(zenzCandidate.candidate);
+
+                        // 2. 既存の候補（ビテルビや辞書候補）を重複を排除して後ろに連結
                         for (Candidate c : currentCands) {
                             if (seen.add(c.candidate)) {
                                 newCands.add(c);
                             }
                         }
+
+                        // 3. 選択インデックスの自動調整
+                        int updatedIndex = active.selectedIndex;
+                        if (updatedIndex >= 0) {
+                            updatedIndex++;
+                        }
+
                         mCandidateList = newCands;
                         active.candidates = newCands;
+                        active.selectedIndex = updatedIndex;
+                        mCurrentCandidateIndex = updatedIndex;
+
+                        // 4. UIの即時部分更新
                         updateCandidates();
                         updateFloatingCandidates();
                         updateComposingText();
                     }
+                }
+
+                @Override
+                public void onConversionComplete() {
+                    Log.d("InputEngine", "Zenz streaming conversion completely finished.");
                 }
             });
         }

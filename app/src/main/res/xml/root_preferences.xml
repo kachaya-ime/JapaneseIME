@@ -466,6 +466,18 @@
             android:title="コンテキストサイズ (n_ctx)"
             app:useSimpleSummaryProvider="true"
             />
+        <EditTextPreference
+            android:defaultValue="16"
+            android:key="zenz_max_tokens"
+            android:title="最大生成トークン数 (max_tokens)"
+            app:useSimpleSummaryProvider="true"
+            />
+        <EditTextPreference
+            android:defaultValue="3"
+            android:key="zenz_max_candidates"
+            android:title="最大候補数 (max_candidates)"
+            app:useSimpleSummaryProvider="true"
+            />
         <SwitchPreference
             android:defaultValue="false"
             android:key="zenz_use_context"
@@ -478,6 +490,18 @@
             android:key="zenz_temperature"
             android:summary="0.0 (Greedy Decoding)"
             android:title="Temperature (サンプリング温度)"
+            />
+        <EditTextPreference
+            android:defaultValue="0.90"
+            android:key="zenz_top_p"
+            android:title="Top-P 厳密さ (Nucleus サンプリング)"
+            app:useSimpleSummaryProvider="true"
+            />
+        <EditTextPreference
+            android:defaultValue="50"
+            android:key="zenz_top_k"
+            android:title="Top-K サンプリング"
+            app:useSimpleSummaryProvider="true"
             />
     </PreferenceCategory>
 
