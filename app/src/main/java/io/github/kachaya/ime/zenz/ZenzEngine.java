@@ -63,7 +63,16 @@ public class ZenzEngine {
     private native boolean nativeInit(String modelPath, int nThreads, int nCtx, int nGpuLayers);
     private native boolean nativeIsLoaded();
     private native void nativeClose();
-    private native String nativeConvert(String prompt, int maxTokens, float temperature);
+
+    private native int[] nativeTokenize(String text, boolean parseSpecial);
+    private native int nativeGetCtxSize();
+    private native void nativeClearKvCache();
+    private native void nativeClearKvCacheAfter(int pos);
+    private native boolean nativeEvalTokens(int[] tokens, int startPos, int nTokens);
+    private native int nativeSampleToken(float temperature);
+    private native int[] nativeSampleTopKTokens(int k);
+    private native byte[] nativeTokenToPiece(int token);
+    private native int nativeGetEosToken();
 
     public interface ConversionCallback {
         void onResult(List<Candidate> candidates);
@@ -95,7 +104,7 @@ public class ZenzEngine {
         if (prefs == null) return;
         mEnabled = prefs.getBoolean(PREF_KEY_ZENZ_ENABLED, false);
         mModelPath = prefs.getString(PREF_KEY_ZENZ_MODEL_PATH, "");
-        
+
         try {
             mThreads = Integer.parseInt(prefs.getString(PREF_KEY_ZENZ_THREADS, "4"));
         } catch (Exception e) {
@@ -133,10 +142,10 @@ public class ZenzEngine {
         if (!sLibraryLoaded) return;
         mExecutor.execute(() -> {
             if (isLoaded() &&
-                modelPath.equals(mLoadedModelPath) &&
-                nThreads == mLoadedThreads &&
-                nCtx == mLoadedCtxSize &&
-                nGpuLayers == mLoadedGpuLayers) {
+                    modelPath.equals(mLoadedModelPath) &&
+                    nThreads == mLoadedThreads &&
+                    nCtx == mLoadedCtxSize &&
+                    nGpuLayers == mLoadedGpuLayers) {
                 Log.d(TAG, "Zenz model is already loaded with same parameters. Skipping reload.");
                 if (onComplete != null) mMainHandler.post(onComplete);
                 return;
@@ -198,8 +207,8 @@ public class ZenzEngine {
         String cleanContext = "";
         if (contextLeft != null && !contextLeft.trim().isEmpty()) {
             cleanContext = contextLeft.replaceAll("[\\r\\n\\t]", "")
-                                      .replaceAll("^[a-zA-Z]+", "")
-                                      .trim();
+                    .replaceAll("^[a-zA-Z]+", "")
+                    .trim();
         }
 
         StringBuilder sb = new StringBuilder();
@@ -223,6 +232,9 @@ public class ZenzEngine {
         return formatZenzV3Prompt(reading, contextLeft, "");
     }
 
+    /**
+     * 外部から呼び出される非同期変換メソッドです。
+     */
     public void convertAsync(String reading, String contextLeft, ConversionCallback callback) {
         if (!isEnabled() || reading == null || reading.isEmpty()) {
             if (callback != null) callback.onResult(Collections.emptyList());
@@ -237,88 +249,195 @@ public class ZenzEngine {
         });
     }
 
-    public void convertAsync(String reading, ConversionCallback callback) {
-        convertAsync(reading, "", callback);
+    private boolean containsStopToken(String text) {
+        if (text == null) return false;
+        return text.contains("\uEE00") || text.contains("\uEE01") ||
+                text.contains("\uEE02") || text.contains("\uEE07") ||
+                text.toLowerCase().contains("<u+ee");
     }
 
-    public List<Candidate> convertSync(String reading, String contextLeft) {
-        if (!isEnabled() || reading == null || reading.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return convertSyncInternal(reading, contextLeft);
-    }
-
-    public List<Candidate> convertSync(String reading) {
-        return convertSync(reading, "");
-    }
-
-    public static String escapeControlTags(String str) {
-        if (str == null || str.isEmpty()) return "";
-        StringBuilder sb = new StringBuilder(str.length());
-        for (int i = 0; i < str.length(); i++) {
-            char c = str.charAt(i);
-            if (c >= '\uEE00' && c <= '\uEE07') {
-                sb.append(String.format("<U+%04X>", (int) c));
-            } else {
-                sb.append(c);
+    private String trimStopToken(String text) {
+        if (text == null) return "";
+        int minIndex = text.length();
+        String[] stopStrings = {"\uEE00", "\uEE01", "\uEE02", "\uEE07", "<U+EE", "<u+ee"};
+        for (String stopStr : stopStrings) {
+            int idx = text.indexOf(stopStr);
+            if (idx != -1 && idx < minIndex) {
+                minIndex = idx;
             }
         }
-        return sb.toString();
+        return text.substring(0, minIndex);
     }
 
-    private List<Candidate> convertSyncInternal(String reading, String contextLeft) {
-        if (!isLoaded()) return Collections.emptyList();
-
+    /**
+     * 【実装完了】バックグラウンドスレッドで実行される内部同期変換メソッド
+     */
+    private synchronized List<Candidate> convertSyncInternal(String reading, String contextLeft) {
+        // 1. プロンプト生成
         String prompt = formatPrompt(reading, contextLeft);
-        Log.d(TAG, "Zenz conversion prompt: " + escapeControlTags(prompt));
+        Log.i(TAG, "Zenz prompt: " + prompt);
 
-        long startTime = System.currentTimeMillis();
-        String result = nativeConvert(prompt, 64, mTemperature);
-        long duration = System.currentTimeMillis() - startTime;
-        Log.d(TAG, "Zenz conversion raw result: '" + escapeControlTags(result) + "' (took " + duration + " ms)");
+        int maxTokens = 64;
 
-        if (result == null || result.trim().isEmpty()) {
+        // 2. トークナイズ
+        int[] promptTokens = nativeTokenize(prompt, true);
+        if (promptTokens == null || promptTokens.length == 0) {
             return Collections.emptyList();
         }
 
-        return parseCandidates(reading, result);
-    }
+        int nCtx = nativeGetCtxSize();
+        if (promptTokens.length > nCtx - maxTokens) {
+            int newLen = Math.max(1, nCtx - maxTokens);
+            int[] truncated = new int[newLen];
+            System.arraycopy(promptTokens, 0, truncated, 0, newLen);
+            promptTokens = truncated;
+        }
 
-    private List<Candidate> parseCandidates(String reading, String rawResult) {
+        nativeClearKvCache();
+        if (!nativeEvalTokens(promptTokens, 0, promptTokens.length)) {
+            Log.e(TAG, "Failed to decode prompt");
+            return Collections.emptyList();
+        }
+
+        int eosToken = nativeGetEosToken();
+        int promptLen = promptTokens.length;
+
+        // 3. Top-N 分岐生成 (最初のトークンの上位 logits から複数候補を生成)
+        int maxCandidates = 5;
+        int[] topTokens = nativeSampleTopKTokens(maxCandidates);
+
         List<Candidate> candidates = new ArrayList<>();
-        if (rawResult == null) return candidates;
+        java.util.Set<String> addedSurfaces = new java.util.HashSet<>();
 
-        String clean = rawResult.trim();
+        if (topTokens != null && topTokens.length > 0) {
+            for (int branch = 0; branch < topTokens.length; branch++) {
+                int firstToken = topTokens[branch];
+                if (firstToken < 0 || firstToken == eosToken) {
+                    continue;
+                }
 
-        // Truncate at the first control character or special token
-        String[] tags = new String[]{"\uEE00", "\uEE01", "\uEE02", "\uEE03", "\uEE04", "\uEE05", "\uEE06", "\uEE07", "<|im_end|>", "<|endoftext|>", "</s>", "<s>", "[PAD]", "[UNK]"};
-        for (String tag : tags) {
-            int idx = clean.indexOf(tag);
-            if (idx != -1) {
-                clean = clean.substring(0, idx);
+                // 2番目以降の分岐では、プロンプト直後以降の KV キャッシュをクリアしてプロンプト状態に戻す
+                if (branch > 0) {
+                    nativeClearKvCacheAfter(promptLen);
+                }
+
+                StringBuilder generatedText = new StringBuilder();
+                java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
+
+                // 先頭トークンを出力に追加
+                byte[] firstBytes = nativeTokenToPiece(firstToken);
+                if (firstBytes != null && firstBytes.length > 0) {
+                    try {
+                        outputStream.write(firstBytes);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error writing piece bytes", e);
+                    }
+                }
+
+                int currPos = promptLen;
+                if (!nativeEvalTokens(new int[]{firstToken}, currPos++, 1)) {
+                    continue;
+                }
+
+                // 残りトークンのデコードループ
+                int consecutiveSameTokenCount = 0;
+                int lastToken = firstToken;
+
+                for (int i = 1; i < maxTokens; i++) {
+                    int currToken = nativeSampleToken(mTemperature);
+                    if (currToken < 0 || currToken == eosToken) {
+                        break;
+                    }
+
+                    if (currToken == lastToken) {
+                        consecutiveSameTokenCount++;
+                        if (consecutiveSameTokenCount >= 5) {
+                            Log.w(TAG, "Zenz generation loop detected in branch " + branch + ". Aborting branch.");
+                            break;
+                        }
+                    } else {
+                        consecutiveSameTokenCount = 0;
+                    }
+                    lastToken = currToken;
+
+                    byte[] pieceBytes = nativeTokenToPiece(currToken);
+                    if (pieceBytes != null && pieceBytes.length > 0) {
+                        try {
+                            outputStream.write(pieceBytes);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error writing piece bytes", e);
+                        }
+
+                        String currentStr = "";
+                        try {
+                            currentStr = outputStream.toString("UTF-8");
+                        } catch (Exception ignored) {}
+
+                        if (containsStopToken(currentStr)) {
+                            currentStr = trimStopToken(currentStr);
+                            generatedText.setLength(0);
+                            generatedText.append(currentStr);
+                            break;
+                        }
+
+                        generatedText.setLength(0);
+                        generatedText.append(currentStr);
+                    }
+
+                    if (!nativeEvalTokens(new int[]{currToken}, currPos++, 1)) {
+                        Log.e(TAG, "Failed to decode next token");
+                        break;
+                    }
+                }
+
+                String candidateText = generatedText.toString().trim();
+                if (candidateText.contains("<")) {
+                    candidateText = candidateText.split("<")[0].trim();
+                }
+
+                if (!candidateText.isEmpty() && addedSurfaces.add(candidateText)) {
+                    candidates.add(new Candidate(candidateText, candidateText, "Zenz AI")
+                            .setType(Candidate.Type.ZENZ));
+                }
             }
         }
 
-        clean = clean.trim();
-        if (clean.isEmpty()) return candidates;
+        // 4. 第二・第三候補: IMEとしての基本フォールバック候補 (ひらがな・カタカナ)
+        if (reading != null && !reading.isEmpty()) {
+            if (addedSurfaces.add(reading)) {
+                candidates.add(new Candidate(reading, reading, "ひらがな")
+                        .setType(Candidate.Type.SYSTEM));
+            }
 
-        // Separate multiple candidate lines if any
-        String[] lines = clean.split("\n");
-        for (String line : lines) {
-            String candStr = line.trim();
-            if (!candStr.isEmpty()) {
-                Candidate candidate = new Candidate(candStr, reading);
-                candidate.setType(Candidate.Type.ZENZ);
-                candidate.setAnnotation("Zenz LLM");
-                candidates.add(candidate);
+            String katakana = RomajiConverter.toWideKatakana(reading);
+            if (katakana != null && addedSurfaces.add(katakana)) {
+                candidates.add(new Candidate(katakana, katakana, "カタカナ")
+                        .setType(Candidate.Type.SYSTEM));
             }
         }
 
         return candidates;
     }
 
+    /**
+     * 【同期的な即時解放版】
+     */
     public void release() {
-        closeAsync();
-        mExecutor.shutdown();
+        Log.i(TAG, "release() called. Direct native close...");
+        if (sLibraryLoaded) {
+            try {
+                if (nativeIsLoaded()) {
+                    nativeClose();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error directly closing native Zenz context", e);
+            } finally {
+                mLoadedModelPath = "";
+                mLoadedThreads = -1;
+                mLoadedCtxSize = -1;
+                mLoadedGpuLayers = -1;
+            }
+        }
     }
+
 }

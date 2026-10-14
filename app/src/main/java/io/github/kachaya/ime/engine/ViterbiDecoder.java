@@ -244,7 +244,7 @@ public class ViterbiDecoder {
             String fullSurface = surfaceBuilder.toString();
             if (!fullSurface.isEmpty() && seenSurfaces.put(fullSurface, true) == null) {
                 WordEntry fullEntry = new WordEntry(key, fullSurface, path.posId, path.totalCost);
-                Candidate candidate = new Candidate(fullSurface, fullSurface).setType(learningDictInvolved ? Candidate.Type.LEARNING : Candidate.Type.SYSTEM)
+                Candidate candidate = new Candidate(fullSurface, fullSurface, "Zenz AI").setType(learningDictInvolved ? Candidate.Type.LEARNING : Candidate.Type.SYSTEM)
                         .setEntry(fullEntry)
                         .setViterbiPathNode(path);
 

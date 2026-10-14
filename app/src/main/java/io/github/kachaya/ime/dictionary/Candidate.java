@@ -37,8 +37,9 @@ public class Candidate {
      *
      * @param rawCandidate 生の辞書データ
      * @param template     表示・確定用のテンプレート文字列
+     * @param zenzAi
      */
-    public Candidate(String rawCandidate, String template) {
+    public Candidate(String rawCandidate, String template, String zenzAi) {
         this.rawCandidate = rawCandidate;
         this.candidate = template;
         this.type = Type.SYSTEM;

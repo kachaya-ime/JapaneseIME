@@ -123,7 +123,7 @@ public class PredictionDictionary {
         try (Cursor cursor = mDbPredictionDict.rawQuery(sql, selectionArgs)) {
             while (cursor.moveToNext()) {
                 String nextWord = cursor.getString(0);
-                Candidate c = new Candidate(nextWord, nextWord);
+                Candidate c = new Candidate(nextWord, nextWord, "Zenz AI");
                 c.setType(Candidate.Type.PREDICTION);
                 candidates.add(c);
             }

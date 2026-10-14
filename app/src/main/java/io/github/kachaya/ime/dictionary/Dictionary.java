@@ -107,7 +107,7 @@ public class Dictionary {
         for (String rawCand : list1) {
             String template = rawCand != null ? rawCand : "";
             boolean isLearning = learningCandsSet.contains(rawCand);
-            Candidate c = new Candidate(rawCand, template);
+            Candidate c = new Candidate(rawCand, template, "Zenz AI");
             if (isLearning) {
                 c.setType(Candidate.Type.LEARNING);
             }

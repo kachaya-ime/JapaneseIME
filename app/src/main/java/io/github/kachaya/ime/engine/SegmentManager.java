@@ -116,6 +116,11 @@ public class SegmentManager {
         if (!hasSegments()) {
             return null;
         }
+        Segment active = getActiveSegment();
+        Candidate activeCand = active != null ? active.getSelectedCandidate() : null;
+        if (activeCand != null && activeCand.isZenz()) {
+            return activeCand.candidate;
+        }
         StringBuilder sb = new StringBuilder();
         for (Segment seg : mSegments) {
             sb.append(seg.getSelectedSurface());

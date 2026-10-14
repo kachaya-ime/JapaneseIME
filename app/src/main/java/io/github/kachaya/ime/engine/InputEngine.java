@@ -16,12 +16,10 @@ import android.view.inputmethod.InputConnection;
 import androidx.preference.PreferenceManager;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -937,7 +935,7 @@ public class InputEngine {
         }
         List<Candidate> cands = new ArrayList<>();
         for (String surf : predictedSurfaces) {
-            Candidate c = new Candidate(surf, surf);
+            Candidate c = new Candidate(surf, surf, "Zenz AI");
             c.setType(Candidate.Type.PREDICTION);
             cands.add(c);
         }
@@ -1027,15 +1025,25 @@ public class InputEngine {
             if (mSegmentManager.hasSegments()) {
                 List<Segment> segments = mSegmentManager.getSegments();
                 int focusedIdx = mSegmentManager.getFocusedSegmentIndex();
-                for (int i = 0; i < segments.size(); i++) {
-                    Segment seg = segments.get(i);
+                Segment activeSeg = mSegmentManager.getActiveSegment();
+                Candidate activeCand = activeSeg != null ? activeSeg.getSelectedCandidate() : null;
+
+                if (activeCand != null && activeCand.isZenz()) {
                     int segStart = ct.length();
-                    ct.append(convertText(seg.getSelectedSurface()));
+                    ct.append(convertText(activeCand.candidate));
                     int segEnd = ct.length();
-                    if (i == focusedIdx) {
-                        ct.setSpan(new BackgroundColorSpan(mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING);
-                    } else {
-                        ct.setSpan(new BackgroundColorSpan(mColorComposing), segStart, segEnd, Spanned.SPAN_COMPOSING);
+                    ct.setSpan(new BackgroundColorSpan(mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING);
+                } else {
+                    for (int i = 0; i < segments.size(); i++) {
+                        Segment seg = segments.get(i);
+                        int segStart = ct.length();
+                        ct.append(convertText(seg.getSelectedSurface()));
+                        int segEnd = ct.length();
+                        if (i == focusedIdx) {
+                            ct.setSpan(new BackgroundColorSpan(mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING);
+                        } else {
+                            ct.setSpan(new BackgroundColorSpan(mColorComposing), segStart, segEnd, Spanned.SPAN_COMPOSING);
+                        }
                     }
                 }
             } else {
@@ -1138,7 +1146,7 @@ public class InputEngine {
     public List<Candidate> getSegmentCandidates(String segmentReading, String preferredSurface) {
         List<Candidate> rawCands = new ArrayList<>();
 
-        if (!isZenzActive() && mViterbiDecoder != null) {
+        if (mViterbiDecoder != null) {
             try {
                 List<Candidate> viterbiCands = mViterbiDecoder.decode(segmentReading, null);
                 if (viterbiCands != null) {
@@ -1172,7 +1180,7 @@ public class InputEngine {
                 }
             }
             if (prefCand == null) {
-                prefCand = new Candidate(preferredSurface, preferredSurface);
+                prefCand = new Candidate(preferredSurface, preferredSurface, "Zenz AI");
             }
             merged.add(prefCand);
         }
@@ -1186,13 +1194,13 @@ public class InputEngine {
         }
 
         if (seen.add(segmentReading)) {
-            merged.add(new Candidate(segmentReading, segmentReading));
+            merged.add(new Candidate(segmentReading, segmentReading, "Zenz AI"));
         }
         if (seen.add(wideKatakana)) {
-            merged.add(new Candidate(wideKatakana, wideKatakana));
+            merged.add(new Candidate(wideKatakana, wideKatakana, "Zenz AI"));
         }
         if (seen.add(halfKatakana)) {
-            merged.add(new Candidate(halfKatakana, halfKatakana));
+            merged.add(new Candidate(halfKatakana, halfKatakana, "Zenz AI"));
         }
 
         return merged;
@@ -1290,7 +1298,7 @@ public class InputEngine {
         String query = mComposingBuffer.getSearchQuery();
 
         List<Segment> segments = new ArrayList<>();
-        if (!isZenzActive() && mViterbiDecoder != null) {
+        if (mViterbiDecoder != null) {
             try {
                 List<Candidate> viterbiCands = mViterbiDecoder.decode(query, null);
                 if (viterbiCands != null && !viterbiCands.isEmpty() && viterbiCands.get(0).viterbiPathNode != null) {
@@ -1364,6 +1372,7 @@ public class InputEngine {
                         active.candidates = newCands;
                         updateCandidates();
                         updateFloatingCandidates();
+                        updateComposingText();
                     }
                 }
             });
@@ -1504,7 +1513,7 @@ public class InputEngine {
         String query = mComposingBuffer.getComposingTextString();
         List<Candidate> rawCandidates = new ArrayList<>();
 
-        if (!isZenzActive() && mViterbiDecoder != null) {
+        if (mViterbiDecoder != null) {
             try {
                 List<Candidate> viterbiCands = mViterbiDecoder.decode(query, null);
                 if (viterbiCands != null) {
@@ -1558,13 +1567,13 @@ public class InputEngine {
         merged.addAll(otherList);
 
         if (seen.add(query)) {
-            merged.add(new Candidate(query, query));
+            merged.add(new Candidate(query, query, "Zenz AI"));
         }
         if (seen.add(wideKatakana)) {
-            merged.add(new Candidate(wideKatakana, wideKatakana));
+            merged.add(new Candidate(wideKatakana, wideKatakana, "Zenz AI"));
         }
         if (seen.add(halfKatakana)) {
-            merged.add(new Candidate(halfKatakana, halfKatakana));
+            merged.add(new Candidate(halfKatakana, halfKatakana, "Zenz AI"));
         }
 
         mCandidateList = merged;
@@ -1633,11 +1642,18 @@ public class InputEngine {
 
             StringBuilder fullSurface = new StringBuilder();
             List<String> surfaces = new ArrayList<>();
-            for (Segment seg : segments) {
-                String surf = seg.getSelectedSurface();
-                fullSurface.append(surf);
-                if (surf != null && !surf.isEmpty()) {
-                    surfaces.add(surf);
+
+            Candidate activeSelected = active != null ? active.getSelectedCandidate() : null;
+            if (activeSelected != null && activeSelected.isZenz()) {
+                fullSurface.append(activeSelected.candidate);
+                surfaces.add(activeSelected.candidate);
+            } else {
+                for (Segment seg : segments) {
+                    String surf = seg.getSelectedSurface();
+                    fullSurface.append(surf);
+                    if (surf != null && !surf.isEmpty()) {
+                        surfaces.add(surf);
+                    }
                 }
             }
 
