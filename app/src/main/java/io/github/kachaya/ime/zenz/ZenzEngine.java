@@ -60,6 +60,8 @@ public class ZenzEngine {
     private int mLoadedCtxSize = -1;
     private int mLoadedGpuLayers = -1;
 
+    private int[] mLastPromptTokens = null;
+
     private native boolean nativeInit(String modelPath, int nThreads, int nCtx, int nGpuLayers);
     private native boolean nativeIsLoaded();
     private native void nativeClose();
@@ -166,11 +168,13 @@ public class ZenzEngine {
                 mLoadedThreads = nThreads;
                 mLoadedCtxSize = nCtx;
                 mLoadedGpuLayers = nGpuLayers;
+                mLastPromptTokens = null;
             } else {
                 mLoadedModelPath = "";
                 mLoadedThreads = -1;
                 mLoadedCtxSize = -1;
                 mLoadedGpuLayers = -1;
+                mLastPromptTokens = null;
             }
 
             if (onComplete != null) {
@@ -193,6 +197,7 @@ public class ZenzEngine {
                 mLoadedThreads = -1;
                 mLoadedCtxSize = -1;
                 mLoadedGpuLayers = -1;
+                mLastPromptTokens = null;
             }
         });
     }
@@ -282,6 +287,7 @@ public class ZenzEngine {
         // 2. トークナイズ
         int[] promptTokens = nativeTokenize(prompt, true);
         if (promptTokens == null || promptTokens.length == 0) {
+            mLastPromptTokens = null;
             return Collections.emptyList();
         }
 
@@ -293,12 +299,48 @@ public class ZenzEngine {
             promptTokens = truncated;
         }
 
-        nativeClearKvCache();
-        if (!nativeEvalTokens(promptTokens, 0, promptTokens.length)) {
-            Log.e(TAG, "Failed to decode prompt");
-            return Collections.emptyList();
+        // --- Prefix Caching 判定 ---
+        int commonPrefixLen = 0;
+        if (mLastPromptTokens != null) {
+            int maxLen = Math.min(mLastPromptTokens.length, promptTokens.length);
+            while (commonPrefixLen < maxLen && mLastPromptTokens[commonPrefixLen] == promptTokens[commonPrefixLen]) {
+                commonPrefixLen++;
+            }
         }
 
+        if (commonPrefixLen > 0) {
+            // 共通プレフィックス位置以降の古い KV キャッシュをクリア
+            nativeClearKvCacheAfter(commonPrefixLen);
+
+            int diffLen = promptTokens.length - commonPrefixLen;
+            if (diffLen > 0) {
+                int[] diffTokens = new int[diffLen];
+                System.arraycopy(promptTokens, commonPrefixLen, diffTokens, 0, diffLen);
+                if (!nativeEvalTokens(diffTokens, commonPrefixLen, diffLen)) {
+                    Log.e(TAG, "Failed to decode diff prompt tokens. Falling back to full eval.");
+                    mLastPromptTokens = null;
+                    nativeClearKvCache();
+                    if (!nativeEvalTokens(promptTokens, 0, promptTokens.length)) {
+                        return Collections.emptyList();
+                    }
+                } else {
+                    Log.d(TAG, "Prefix Cache Hit! Common prefix len: " + commonPrefixLen + ", diff len: " + diffLen);
+                }
+            } else {
+                Log.d(TAG, "Prefix Cache Full Hit! Common prefix len: " + commonPrefixLen);
+            }
+        } else {
+            // 完全不一致または初回評価: KV キャッシュを全削除して評価
+            nativeClearKvCache();
+            if (!nativeEvalTokens(promptTokens, 0, promptTokens.length)) {
+                Log.e(TAG, "Failed to decode prompt");
+                mLastPromptTokens = null;
+                return Collections.emptyList();
+            }
+        }
+
+        // 次回比較用に今回のプロンプトを保存
+        mLastPromptTokens = promptTokens;
         int eosToken = nativeGetEosToken();
         int promptLen = promptTokens.length;
 
@@ -402,6 +444,9 @@ public class ZenzEngine {
             }
         }
 
+        // 次回の Prefix Caching のため、生成されたトークン以降の KV キャッシュをクリアしてプロンプト長状態を保持
+        nativeClearKvCacheAfter(promptLen);
+
         // 4. 第二・第三候補: IMEとしての基本フォールバック候補 (ひらがな・カタカナ)
         if (reading != null && !reading.isEmpty()) {
             if (addedSurfaces.add(reading)) {
@@ -436,6 +481,7 @@ public class ZenzEngine {
                 mLoadedThreads = -1;
                 mLoadedCtxSize = -1;
                 mLoadedGpuLayers = -1;
+                mLastPromptTokens = null;
             }
         }
     }
