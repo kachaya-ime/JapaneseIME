@@ -1404,7 +1404,7 @@ public class InputEngine {
         changeState(InputStateConverting.INSTANCE);
         syncActiveSegment();
 
-        if (isZenzActive()) {
+        if (isZenzActive() && !hasUnconvertedAlphabet(query)) {
             final String leftContext = getCleanLeftContext(20);
             Log.i("InputEngine", "[Zenz Request] query=\"" + query + "\", leftContext=\"" + leftContext + "\"");
 
@@ -1698,7 +1698,8 @@ public class InputEngine {
         }
 
         // Zenzエンジン有効時、見出し語（ひらがな）入力中にライブ変換を行って候補一覧に追加
-        if (isZenzActive()) {
+        // ローマ字からひらがなに変換しきれなかったアルファベットが残っている場合は Zenz に要求しない
+        if (isZenzActive() && !hasUnconvertedAlphabet(query)) {
             final String currentQuery = query;
             final String leftContext = getCleanLeftContext(20);
             Log.i("InputEngine", "[Zenz Live Suggest Request] query=\"" + currentQuery + "\", leftContext=\"" + leftContext + "\"");
@@ -1708,9 +1709,9 @@ public class InputEngine {
                 public void onCandidateAvailable(Candidate zenzCandidate) {
                     if (mState != InputStateComposing.INSTANCE) return;
 
-                    // クエリ（入力中の読み）が変更されていないかチェック
+                    // クエリ（入力中の読み）が変更されていないか、変換前のアルファベットが残っていないかチェック
                     String nowQuery = mComposingBuffer.getComposingTextString();
-                    if (!currentQuery.equals(nowQuery)) {
+                    if (!currentQuery.equals(nowQuery) || hasUnconvertedAlphabet(nowQuery)) {
                         return;
                     }
 
@@ -1769,6 +1770,30 @@ public class InputEngine {
             });
         }
     }
+
+    /**
+     * 未確定のローマ字（mRomajiBuffer）が残っているか、またはクエリにアルファベットが含まれているかを判定します。
+     *
+     * @param query チェック対象のクエリ文字列
+     * @return 変換しきれていないアルファベットが存在する場合は true
+     */
+    private boolean hasUnconvertedAlphabet(String query) {
+        if (mComposingBuffer.hasRomaji()) {
+            return true;
+        }
+        if (query != null) {
+            for (int i = 0; i < query.length(); i++) {
+                char c = query.charAt(i);
+                if (RomajiConverter.isAlphabet(c) || (c >= 'Ａ' && c <= 'Ｚ') || (c >= 'ａ' && c <= 'ｚ')) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 指定された候補文字列が読み（ひらがな・全角カタカナ・半角カタカナ）そのままの表記であるかを判定します。
 
     /**
      * 指定された候補文字列が読み（ひらがな・全角カタカナ・半角カタカナ）そのままの表記であるかを判定します。
