@@ -141,6 +141,10 @@ public class InputEngine {
         return mZenzEngine != null && mZenzEngine.isEnabled();
     }
 
+    public boolean isViterbiActive() {
+        return !isZenzActive();
+    }
+
     /**
      * InputEngine を構築します。
      *
@@ -907,7 +911,7 @@ public class InputEngine {
                 updateComposingText();
             }
         } else if (mState == InputStateComposing.INSTANCE) {
-            pickSuggestion(index);
+            pickComposingCandidate(index);
             updateComposingText();
         } else if (mState == InputStateIdle.INSTANCE) {
             if (index >= 0 && index < mCandidateList.size()) {
@@ -917,6 +921,41 @@ public class InputEngine {
                 updateIdlePredictions();
             }
         }
+    }
+
+    /**
+     * 見出し語入力（Composing）状態において、候補一覧からタップされた候補を確定（commitText）します。
+     *
+     * @param index 選択された候補のインデックス
+     */
+    public void pickComposingCandidate(int index) {
+        if (index < 0 || index >= mCandidateList.size()) {
+            return;
+        }
+
+        Candidate c = mCandidateList.get(index);
+        String candidateStr = c.candidate;
+        CharSequence finalCandidate = mMode.convertText(candidateStr);
+
+        // 1. エディタに確定文字列を送信
+        commitTextInternal(finalCandidate, 1);
+
+        // 2. 学習処理
+        if (mDictionary != null) {
+            String key = mComposingBuffer.getSearchQuery();
+            if (mEnableLearning && !c.isSuggestion() && !c.isPrediction() && !c.isZenz() && c.rawCandidate != null) {
+                if (mLastCommittedCandidate != null) {
+                    mDictionary.learnTransition(mLastCommittedCandidate, finalCandidate.toString());
+                }
+                mDictionary.addEntry(key, c.rawCandidate, c.getPosId(), c.getCost());
+            }
+        }
+
+        mLastCommittedCandidate = finalCandidate.toString();
+
+        // 3. 入力バッファをクリアし、Idle 状態へ遷移
+        clearBuffers();
+        changeState(InputStateIdle.INSTANCE);
     }
 
     /**
@@ -973,30 +1012,53 @@ public class InputEngine {
 
     public void insertComposingText(String text) {
         mComposingBuffer.insertComposingText(text);
+        if (mState == InputStateComposing.INSTANCE) {
+            updateSuggestions();
+        }
         updateUI();
     }
 
     public boolean deleteComposingCharBeforeCursor() {
         boolean res = mComposingBuffer.deleteComposingCharBeforeCursor();
-        if (res) updateUI();
+        if (res) {
+            if (mState == InputStateComposing.INSTANCE) {
+                updateSuggestions();
+            }
+            updateUI();
+        }
         return res;
     }
 
     public boolean deleteComposingCharAfterCursor() {
         boolean res = mComposingBuffer.deleteComposingCharAfterCursor();
-        if (res) updateUI();
+        if (res) {
+            if (mState == InputStateComposing.INSTANCE) {
+                updateSuggestions();
+            }
+            updateUI();
+        }
         return res;
     }
 
     public boolean killComposingToLineEnd() {
         boolean res = mComposingBuffer.killComposingToLineEnd();
-        if (res) updateUI();
+        if (res) {
+            if (mState == InputStateComposing.INSTANCE) {
+                updateSuggestions();
+            }
+            updateUI();
+        }
         return res;
     }
 
     public boolean killComposingToLineStart() {
         boolean res = mComposingBuffer.killComposingToLineStart();
-        if (res) updateUI();
+        if (res) {
+            if (mState == InputStateComposing.INSTANCE) {
+                updateSuggestions();
+            }
+            updateUI();
+        }
         return res;
     }
 
@@ -1146,7 +1208,7 @@ public class InputEngine {
     public List<Candidate> getSegmentCandidates(String segmentReading, String preferredSurface) {
         List<Candidate> rawCands = new ArrayList<>();
 
-        if (mViterbiDecoder != null) {
+        if (isViterbiActive() && mViterbiDecoder != null) {
             try {
                 List<Candidate> viterbiCands = mViterbiDecoder.decode(segmentReading, null);
                 if (viterbiCands != null) {
@@ -1280,7 +1342,7 @@ public class InputEngine {
                 delta,
                 mComposingBuffer.getSearchQuery(),
                 this::getSegmentCandidates,
-                mViterbiDecoder
+                isViterbiActive() ? mViterbiDecoder : null
         );
         if (res) {
             syncActiveSegment();
@@ -1298,7 +1360,7 @@ public class InputEngine {
         String query = mComposingBuffer.getSearchQuery();
 
         List<Segment> segments = new ArrayList<>();
-        if (mViterbiDecoder != null) {
+        if (isViterbiActive() && mViterbiDecoder != null) {
             try {
                 List<Candidate> viterbiCands = mViterbiDecoder.decode(query, null);
                 if (viterbiCands != null && !viterbiCands.isEmpty() && viterbiCands.get(0).viterbiPathNode != null) {
@@ -1342,20 +1404,17 @@ public class InputEngine {
         changeState(InputStateConverting.INSTANCE);
         syncActiveSegment();
 
-        if (mZenzEngine != null && mZenzEngine.isEnabled()) {
-            String fullLeftContext = mService != null ? mService.getTextBeforeCursor(20) : "";
-            CharSequence composingCs = mComposingBuffer.getComposingText();
-            String composingText = composingCs != null ? composingCs.toString() : "";
-            if (!composingText.isEmpty() && fullLeftContext.endsWith(composingText)) {
-                fullLeftContext = fullLeftContext.substring(0, fullLeftContext.length() - composingText.length());
-            }
+        if (isZenzActive()) {
+            final String leftContext = getCleanLeftContext(20);
+            Log.i("InputEngine", "[Zenz Request] query=\"" + query + "\", leftContext=\"" + leftContext + "\"");
 
-            final String leftContext = fullLeftContext;
             // 新しい ConversionCallback インターフェース（逐次追加対応）に適合
             mZenzEngine.convertAsync(query, leftContext, new ZenzEngine.ConversionCallback() {
                 @Override
                 public void onCandidateAvailable(Candidate zenzCandidate) {
                     if (!mState.isConverting()) return;
+
+                    Log.i("InputEngine", "[Zenz Received Candidate] candidate=\"" + zenzCandidate.candidate + "\"");
 
                     Segment active = mSegmentManager.getActiveSegment();
                     if (active != null) {
@@ -1534,21 +1593,44 @@ public class InputEngine {
         String query = mComposingBuffer.getComposingTextString();
         List<Candidate> rawCandidates = new ArrayList<>();
 
-        if (mViterbiDecoder != null) {
-            try {
-                List<Candidate> viterbiCands = mViterbiDecoder.decode(query, null);
-                if (viterbiCands != null) {
-                    rawCandidates.addAll(viterbiCands);
+        if (isViterbiActive()) {
+            if (mViterbiDecoder != null) {
+                try {
+                    List<Candidate> viterbiCands = mViterbiDecoder.decode(query, null);
+                    if (viterbiCands != null) {
+                        rawCandidates.addAll(viterbiCands);
+                    }
+                } catch (Exception e) {
+                    Log.e("InputEngine", "Viterbi decode error", e);
                 }
-            } catch (Exception e) {
-                Log.e("InputEngine", "Viterbi decode error", e);
             }
-        }
 
-        if (mDictionary != null) {
-            List<Candidate> dictCands = mDictionary.findCandidates(query);
-            if (dictCands != null) {
-                rawCandidates.addAll(dictCands);
+            if (mDictionary != null) {
+                List<Candidate> dictCands = mDictionary.findCandidates(query);
+                if (dictCands != null) {
+                    rawCandidates.addAll(dictCands);
+                }
+
+                // 前方一致（サジェスト/動的補完）候補の検索
+                List<String> suggestionKeys = mDictionary.findSuggestions(query);
+                if (suggestionKeys != null) {
+                    for (String key : suggestionKeys) {
+                        if (key != null && !key.isEmpty() && !key.equals(query)) {
+                            Candidate keyCand = new Candidate(key, key, "Zenz AI").setType(Candidate.Type.SUGGESTION);
+                            rawCandidates.add(keyCand);
+
+                            List<Candidate> keyCands = mDictionary.findCandidates(key);
+                            if (keyCands != null) {
+                                for (Candidate c : keyCands) {
+                                    Candidate sugCand = new Candidate(c.rawCandidate, c.candidate, "Zenz AI")
+                                            .setType(Candidate.Type.SUGGESTION);
+                                    sugCand.setEntry(c.entry);
+                                    rawCandidates.add(sugCand);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1566,6 +1648,7 @@ public class InputEngine {
         Set<String> seen = new HashSet<>();
         List<Candidate> predictionList = new ArrayList<>();
         List<Candidate> otherList = new ArrayList<>();
+        List<Candidate> suggestionList = new ArrayList<>();
 
         for (Candidate c : rawCandidates) {
             if (c != null && c.candidate != null && !c.candidate.isEmpty()) {
@@ -1576,6 +1659,8 @@ public class InputEngine {
                             c.setType(Candidate.Type.PREDICTION);
                         }
                         predictionList.add(c);
+                    } else if (c.isSuggestion()) {
+                        suggestionList.add(c);
                     } else {
                         otherList.add(c);
                     }
@@ -1586,6 +1671,7 @@ public class InputEngine {
         List<Candidate> merged = new ArrayList<>();
         merged.addAll(predictionList);
         merged.addAll(otherList);
+        merged.addAll(suggestionList);
 
         if (seen.add(query)) {
             merged.add(new Candidate(query, query, "Zenz AI"));
@@ -1600,10 +1686,106 @@ public class InputEngine {
         mCandidateList = merged;
         mCurrentCandidateIndex = 0;
 
+        List<String> sugStrList = new ArrayList<>();
+        for (Candidate c : merged) {
+            sugStrList.add(c.candidate);
+        }
+        mSuggestionList = sugStrList;
+
         if (mService != null) {
             mService.setCandidateObjects(mCandidateList);
             updateFloatingCandidates();
         }
+
+        // Zenzエンジン有効時、見出し語（ひらがな）入力中にライブ変換を行って候補一覧に追加
+        if (isZenzActive()) {
+            final String currentQuery = query;
+            final String leftContext = getCleanLeftContext(20);
+            Log.i("InputEngine", "[Zenz Live Suggest Request] query=\"" + currentQuery + "\", leftContext=\"" + leftContext + "\"");
+
+            mZenzEngine.convertAsync(currentQuery, leftContext, new ZenzEngine.ConversionCallback() {
+                @Override
+                public void onCandidateAvailable(Candidate zenzCandidate) {
+                    if (mState != InputStateComposing.INSTANCE) return;
+
+                    // クエリ（入力中の読み）が変更されていないかチェック
+                    String nowQuery = mComposingBuffer.getComposingTextString();
+                    if (!currentQuery.equals(nowQuery)) {
+                        return;
+                    }
+
+                    Log.i("InputEngine", "[Zenz Live Suggest Received] candidate=\"" + zenzCandidate.candidate + "\"");
+
+                    List<Candidate> currentCands = new ArrayList<>(mCandidateList);
+                    Set<String> seen = new HashSet<>();
+
+                    List<Candidate> zenzConvertedCands = new ArrayList<>();
+                    List<Candidate> plainReadingCands = new ArrayList<>();
+
+                    // 1. 新しく届いた zenzCandidate の振分け
+                    boolean isZenzPlain = isPlainReadingCandidate(nowQuery, zenzCandidate.candidate);
+                    if (isZenzPlain) {
+                        plainReadingCands.add(zenzCandidate);
+                    } else {
+                        zenzConvertedCands.add(zenzCandidate);
+                    }
+                    seen.add(zenzCandidate.candidate);
+
+                    // 2. 既存候補の振分け
+                    for (Candidate c : currentCands) {
+                        if (c != null && c.candidate != null && !c.candidate.isEmpty()) {
+                            if (seen.add(c.candidate)) {
+                                if (isPlainReadingCandidate(nowQuery, c.candidate)) {
+                                    plainReadingCands.add(c);
+                                } else {
+                                    zenzConvertedCands.add(c);
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. 優先度順（通常の漢字変換候補 Candidate -> ひらがな・カタカナ読みそのまま）で結合
+                    List<Candidate> newCands = new ArrayList<>();
+                    newCands.addAll(zenzConvertedCands);
+                    newCands.addAll(plainReadingCands);
+
+                    mCandidateList = newCands;
+                    List<String> sugStrList = new ArrayList<>();
+                    for (Candidate c : newCands) {
+                        sugStrList.add(c.candidate);
+                    }
+                    mSuggestionList = sugStrList;
+
+                    if (mService != null) {
+                        mService.setCandidateObjects(mCandidateList);
+                        updateFloatingCandidates();
+                    }
+                }
+
+                @Override
+                public void onConversionComplete() {
+                    Log.d("InputEngine", "Zenz live suggest conversion completely finished.");
+                }
+            });
+        }
+    }
+
+    /**
+     * 指定された候補文字列が読み（ひらがな・全角カタカナ・半角カタカナ）そのままの表記であるかを判定します。
+     */
+    private boolean isPlainReadingCandidate(String query, String candStr) {
+        if (candStr == null || candStr.isEmpty() || query == null || query.isEmpty()) {
+            return false;
+        }
+        if (candStr.equals(query)) {
+            return true;
+        }
+        String wideK = RomajiConverter.toWideKatakana(query);
+        if (candStr.equals(wideK)) {
+            return true;
+        }
+        String halfK = RomajiConverter.toHalfKatakana(query);
+        return candStr.equals(halfK);
     }
 
     /**
@@ -1635,6 +1817,46 @@ public class InputEngine {
         }
         Candidate c = mCandidateList.get(mCurrentCandidateIndex);
         return c.candidate;
+    }
+
+    /**
+     * Zenz LLM プロンプト用に、エディタ上のテキストから現在入力中の未確定文字列（ComposingText・ローマ字等）を
+     * 完全に除外した「確定済みの左コンテキスト（leftContext）」を抽出して返します。
+     *
+     * @param maxLen 取得する最大の文字数
+     * @return 未確定入力が除去された確定済みの左コンテキスト文字列
+     */
+    public String getCleanLeftContext(int maxLen) {
+        if (mZenzEngine == null || !mZenzEngine.isUseContext()) {
+            return "";
+        }
+        if (mService == null) return "";
+        String fullLeftContext = mService.getTextBeforeCursor(maxLen);
+        if (fullLeftContext == null || fullLeftContext.isEmpty()) {
+            return "";
+        }
+
+        String composingText = mComposingBuffer.getComposingTextString();
+        String romajiBuffer = mComposingBuffer.getRomajiString();
+        String displayComposing = convertText(composingText).toString() + romajiBuffer;
+
+        if (!displayComposing.isEmpty() && fullLeftContext.endsWith(displayComposing)) {
+            return fullLeftContext.substring(0, fullLeftContext.length() - displayComposing.length());
+        }
+
+        if (!composingText.isEmpty() && fullLeftContext.endsWith(composingText)) {
+            return fullLeftContext.substring(0, fullLeftContext.length() - composingText.length());
+        }
+
+        String candidateTrim = displayComposing;
+        while (!candidateTrim.isEmpty()) {
+            if (fullLeftContext.endsWith(candidateTrim)) {
+                return fullLeftContext.substring(0, fullLeftContext.length() - candidateTrim.length());
+            }
+            candidateTrim = candidateTrim.substring(0, candidateTrim.length() - 1);
+        }
+
+        return fullLeftContext;
     }
 
     /**

@@ -35,6 +35,7 @@ public class KeyConfig {
     public static final int CODE_8_2_8 = 16;    // Graffitiでは未定義、左下→右上→左下
     public static final int CODE_10_4_10 = 17;  // Graffitiでは未定義、左上→右下→左上
     public static final int CODE_ESC = 18;
+    public static final int CODE_MODE = 19;
 
     /** 機能キーの定義情報（コード、文字列識別名、デフォルト表示ラベル） */
     private static class KeyEntry {
@@ -68,6 +69,7 @@ public class KeyConfig {
             new KeyEntry(CODE_GAP,       "GAP",       "Gap"),
             new KeyEntry(CODE_ABC,       "ABC",       "abc"),
             new KeyEntry(CODE_ESC,       "ESC",       "Esc"),
+            new KeyEntry(CODE_MODE,      "MODE",      "あ/A"),
     };
 
     private static final Map<Integer, KeyEntry> CODE_TO_ENTRY_MAP = new HashMap<>();
@@ -78,6 +80,8 @@ public class KeyConfig {
             CODE_TO_ENTRY_MAP.put(entry.code, entry);
             STRING_TO_CODE_MAP.put(entry.name.toUpperCase(), entry.code);
         }
+        STRING_TO_CODE_MAP.put("TOGGLE_EN_JP", CODE_MODE);
+        STRING_TO_CODE_MAP.put("EN_JP", CODE_MODE);
     }
 
     /** ファイル保存用の識別名に変換します */

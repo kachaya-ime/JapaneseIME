@@ -10,6 +10,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -22,6 +23,10 @@ import io.github.kachaya.ime.engine.RomajiConverter;
  */
 public class ZenzEngine {
     private static final String TAG = "ZenzEngine";
+
+    public static final String PREF_KEY_CONVERSION_ENGINE = "conversion_engine";
+    public static final String ENGINE_VITERBI = "viterbi";
+    public static final String ENGINE_ZENZ = "zenz";
 
     public static final String PREF_KEY_ZENZ_ENABLED = "zenz_enabled";
     public static final String PREF_KEY_ZENZ_MODEL_PATH = "zenz_model_path";
@@ -118,6 +123,10 @@ public class ZenzEngine {
         return mEnabled && isLoaded();
     }
 
+    public boolean isUseContext() {
+        return mUseContext;
+    }
+
     public boolean isLoaded() {
         if (!sLibraryLoaded) return false;
         try {
@@ -129,7 +138,12 @@ public class ZenzEngine {
 
     public void reloadPreferences(SharedPreferences prefs) {
         if (prefs == null) return;
-        mEnabled = prefs.getBoolean(PREF_KEY_ZENZ_ENABLED, false);
+        String engine = prefs.getString(PREF_KEY_CONVERSION_ENGINE, null);
+        if (engine != null) {
+            mEnabled = ENGINE_ZENZ.equals(engine);
+        } else {
+            mEnabled = prefs.getBoolean(PREF_KEY_ZENZ_ENABLED, false);
+        }
         mModelPath = prefs.getString(PREF_KEY_ZENZ_MODEL_PATH, "");
         try {
             mThreads = Integer.parseInt(prefs.getString(PREF_KEY_ZENZ_THREADS, "4"));
@@ -239,7 +253,7 @@ public class ZenzEngine {
             String cleanRight = contextRight.replaceAll("[\\r\\n\\t]", "").trim();
             if (!cleanRight.isEmpty()) sb.append("\uEE07").append(cleanRight);
         }
-        sb.append("\uEE00").append(katakana).append("\uEE01");
+        sb.append("\uEE00").append(katakana);
         return sb.toString();
     }
 
@@ -261,20 +275,49 @@ public class ZenzEngine {
         });
     }
 
+    /**
+     * プロンプトやレスポンスに含まれるUnicode文字コード 0xEE00 〜 0xEEFF (Private Use Area) を
+     * 16進数値の可視テキストタグ文字列（例: <U+EE00>, <U+EE01> 等）に変換します。
+     */
+    public static String formatVisibleText(String text) {
+        if (text == null || text.isEmpty()) return "";
+
+        StringBuilder sb = new StringBuilder();
+        int len = text.length();
+
+        for (int i = 0; i < len; i++) {
+            char c = text.charAt(i);
+            if (c >= 0xEE00 && c <= 0xEEFF) {
+                sb.append(String.format(Locale.US, "<U+%04X>", (int) c));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
     private boolean containsStopToken(String text) {
-        if (text == null) return false;
-        return text.contains("\uEE00") || text.contains("\uEE01") || text.contains("\uEE02") || text.contains("\uEE07") || text.toLowerCase().contains("<u+ee");
+        if (text == null || text.isEmpty()) return false;
+        int len = text.length();
+        for (int i = 0; i < len; i++) {
+            char c = text.charAt(i);
+            if (c >= 0xEE00 && c <= 0xEEFF) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String trimStopToken(String text) {
-        if (text == null) return "";
-        int minIndex = text.length();
-        String[] stopStrings = {"\uEE00", "\uEE01", "\uEE02", "\uEE07", "<U+EE", "<u+ee"};
-        for (String stopStr : stopStrings) {
-            int idx = text.indexOf(stopStr);
-            if (idx != -1 && idx < minIndex) minIndex = idx;
+        if (text == null || text.isEmpty()) return "";
+        int len = text.length();
+        for (int i = 0; i < len; i++) {
+            char c = text.charAt(i);
+            if (c >= 0xEE00 && c <= 0xEEFF) {
+                return text.substring(0, i);
+            }
         }
-        return text.substring(0, minIndex);
+        return text;
     }
 
     /**
@@ -283,6 +326,10 @@ public class ZenzEngine {
      */
     private void convertSyncInternal(String reading, String contextLeft, ConversionCallback callback) {
         String prompt = formatPrompt(reading, contextLeft);
+        String visiblePrompt = formatVisibleText(prompt);
+        Log.i(TAG, "==================== [ZENZ LLM TEXT SEND/RECV] ====================");
+        Log.i(TAG, "[ZENZ PROMPT PROCESSED]:\n" + visiblePrompt + "<U+EE01>");
+        Log.i(TAG, "------------------------------------------------------------------");
         int maxTokens = 16; // レスポンス向上のため16に最適化
         int[] promptTokens = nativeTokenize(prompt, true);
         if (promptTokens == null || promptTokens.length == 0) {
@@ -292,8 +339,8 @@ public class ZenzEngine {
         }
 
         int nCtx = nativeGetCtxSize();
-        if (promptTokens.length > nCtx - maxTokens) {
-            int newLen = Math.max(1, nCtx - maxTokens);
+        if (promptTokens.length > nCtx - maxTokens - 1) {
+            int newLen = Math.max(1, nCtx - maxTokens - 1);
             int[] truncated = new int[newLen];
             System.arraycopy(promptTokens, 0, truncated, 0, newLen);
             promptTokens = truncated;
@@ -335,6 +382,21 @@ public class ZenzEngine {
         int eosToken = nativeGetEosToken();
         int promptLen = promptTokens.length;
 
+        // 生成開始直前に \uEE01 (出力開始タグ) を 1 トークンのみ評価
+        int[] outputStartTokens = nativeTokenize("\uEE01", false);
+        if (outputStartTokens == null || outputStartTokens.length == 0) {
+            outputStartTokens = nativeTokenize("\uEE01", true);
+        }
+
+        int outputStartLen = 0;
+        if (outputStartTokens != null && outputStartTokens.length > 0) {
+            if (nativeEvalTokens(outputStartTokens, promptLen, outputStartTokens.length)) {
+                outputStartLen = outputStartTokens.length;
+            }
+        }
+
+        int genStartPos = promptLen + outputStartLen;
+
         // Top-N 分岐生成
         int maxCandidates = 3; // レスポンス向上のため3に最適化
         int[] topTokens = nativeSampleTopKTokens(maxCandidates);
@@ -344,13 +406,13 @@ public class ZenzEngine {
             for (int branch = 0; branch < topTokens.length; branch++) {
                 int firstToken = topTokens[branch];
                 if (firstToken < 0 || firstToken == eosToken) continue;
-                if (branch > 0) nativeClearKvCacheAfter(promptLen);
+                if (branch > 0) nativeClearKvCacheAfter(genStartPos);
 
                 java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
                 byte[] firstBytes = nativeTokenToPiece(firstToken);
                 if (firstBytes != null && firstBytes.length > 0) outputStream.write(firstBytes, 0, firstBytes.length);
 
-                int currPos = promptLen;
+                int currPos = genStartPos;
                 if (!nativeEvalTokens(new int[]{firstToken}, currPos++, 1)) continue;
 
                 int consecutiveSameTokenCount = 0;
@@ -381,14 +443,19 @@ public class ZenzEngine {
                 }
 
                 // 確定した1本の文字列をトリミング
-                String candidateText = "";
+                String rawText = "";
                 try {
-                    candidateText = trimStopToken(outputStream.toString("UTF-8")).trim();
+                    rawText = outputStream.toString("UTF-8");
                 } catch (Exception ignored) {}
+
+                String visibleRawText = formatVisibleText(rawText);
+                String candidateText = trimStopToken(rawText).trim();
+
+                Log.i(TAG, "[ZENZ RECV RAW]: " + visibleRawText + " => [CANDIDATE]: " + candidateText);
 
                 if (!candidateText.isEmpty() && addedSurfaces.add(candidateText)) {
                     final Candidate zenzCandidate = new Candidate(candidateText, candidateText, "Zenz AI")
-                            .setType(Candidate.Type.ZENZ);
+                            .setType(Candidate.Type.SYSTEM);
 
                     // 【最重要】1つの候補が完成した瞬間に、即座にUIスレッドへ通知（ストリーミング）
                     if (callback != null) {
@@ -398,6 +465,7 @@ public class ZenzEngine {
             }
         }
 
+        // 次のライブ入力変更時のPrefix Cacheヒットのため、KV Cacheを読みの末尾 (\uEE01の手前) まで巻き戻す
         nativeClearKvCacheAfter(promptLen);
 
         // システムフォールバック (かな・カナ) も即時に通知
@@ -413,6 +481,9 @@ public class ZenzEngine {
                 if (callback != null) mMainHandler.post(() -> callback.onCandidateAvailable(kataCand));
             }
         }
+
+        Log.i(TAG, "[ZENZ COMPLETE]");
+        Log.i(TAG, "============================================================");
 
         // すべての生成プロセスがクリーンに完了したことを通知
         if (callback != null) {

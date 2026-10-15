@@ -435,16 +435,23 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:title="かな漢字変換エンジン設定"
+        app:iconSpaceReserved="false"
+        >
+        <ListPreference
+            android:defaultValue="viterbi"
+            android:entries="@array/conversion_engine_entries"
+            android:entryValues="@array/conversion_engine_values"
+            android:key="conversion_engine"
+            android:title="変換エンジンの選択"
+            app:useSimpleSummaryProvider="true"
+            />
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="Zenz LLM 変換設定 (llama.cpp)"
         app:iconSpaceReserved="false"
         >
-        <SwitchPreference
-            android:defaultValue="false"
-            android:key="zenz_enabled"
-            android:summaryOff="llama.cpp による Zenz LLM かna漢字変換が無効です"
-            android:summaryOn="llama.cpp による Zenz LLM かな漢字変換が有効です"
-            android:title="Zenz LLM 変換を有効にする"
-            />
         <Preference
             android:key="zenz_model_select"
             android:summary="未設定 (タップして .gguf モデルファイルを選択)"

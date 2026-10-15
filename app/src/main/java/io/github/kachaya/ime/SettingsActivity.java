@@ -191,6 +191,25 @@ public class SettingsActivity extends AppCompatActivity {
 
             updateKeyPrefEnabledState();
 
+            androidx.preference.ListPreference enginePref = findPreference(ZenzEngine.PREF_KEY_CONVERSION_ENGINE);
+            if (enginePref != null) {
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+                if (!prefs.contains(ZenzEngine.PREF_KEY_CONVERSION_ENGINE)) {
+                    boolean zenzEnabled = prefs.getBoolean(ZenzEngine.PREF_KEY_ZENZ_ENABLED, false);
+                    enginePref.setValue(zenzEnabled ? ZenzEngine.ENGINE_ZENZ : ZenzEngine.ENGINE_VITERBI);
+                }
+
+                enginePref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    boolean isZenz = ZenzEngine.ENGINE_ZENZ.equals(newValue);
+                    prefs.edit().putBoolean(ZenzEngine.PREF_KEY_ZENZ_ENABLED, isZenz).apply();
+                    updateZenzPreferencesState(isZenz);
+                    return true;
+                });
+
+                boolean isZenz = ZenzEngine.ENGINE_ZENZ.equals(enginePref.getValue());
+                updateZenzPreferencesState(isZenz);
+            }
+
             updateZenzModelSummary();
 
             Preference zenzModelPref = findPreference("zenz_model_select");
@@ -259,6 +278,26 @@ public class SettingsActivity extends AppCompatActivity {
                             .show();
                     return true;
                 });
+            }
+        }
+
+        private void updateZenzPreferencesState(boolean isZenz) {
+            String[] keys = new String[] {
+                    "zenz_model_select",
+                    ZenzEngine.PREF_KEY_ZENZ_THREADS,
+                    ZenzEngine.PREF_KEY_ZENZ_CTX_SIZE,
+                    ZenzEngine.PREF_KEY_ZENZ_MAX_TOKENS,
+                    ZenzEngine.PREF_KEY_ZENZ_MAX_CANDIDATES,
+                    ZenzEngine.PREF_KEY_ZENZ_USE_CONTEXT,
+                    ZenzEngine.PREF_KEY_ZENZ_TEMPERATURE,
+                    ZenzEngine.PREF_KEY_ZENZ_TOP_P,
+                    ZenzEngine.PREF_KEY_ZENZ_TOP_K
+            };
+            for (String key : keys) {
+                Preference pref = findPreference(key);
+                if (pref != null) {
+                    pref.setEnabled(isZenz);
+                }
             }
         }
 

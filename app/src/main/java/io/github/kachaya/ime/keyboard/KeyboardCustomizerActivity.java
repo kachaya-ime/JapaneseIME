@@ -487,8 +487,8 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         row.setOrientation(LinearLayout.HORIZONTAL);
 
         Spinner spinner = new Spinner(this);
-        String[] funcLabels = {"(文字入力)", "Shift", "Enter", "Backspace", "Space", "@!?", "Ctrl", "Tab", "Esc", "左移動", "右移動", "上移動", "下移動", "abc"};
-        int[] funcCodes = {KeyConfig.CODE_NONE, KeyConfig.CODE_SHIFT, KeyConfig.CODE_ENTER, KeyConfig.CODE_BACKSPACE, KeyConfig.CODE_SPACE, KeyConfig.CODE_SYM, KeyConfig.CODE_CTRL, KeyConfig.CODE_TAB, KeyConfig.CODE_ESC, KeyConfig.CODE_LEFT, KeyConfig.CODE_RIGHT, KeyConfig.CODE_UP, KeyConfig.CODE_DOWN, KeyConfig.CODE_ABC};
+        String[] funcLabels = {"(文字入力)", "Shift", "Enter", "Backspace", "Space", "@!?", "Ctrl", "Tab", "Esc", "左移動", "右移動", "上移動", "下移動", "abc", "あ/A"};
+        int[] funcCodes = {KeyConfig.CODE_NONE, KeyConfig.CODE_SHIFT, KeyConfig.CODE_ENTER, KeyConfig.CODE_BACKSPACE, KeyConfig.CODE_SPACE, KeyConfig.CODE_SYM, KeyConfig.CODE_CTRL, KeyConfig.CODE_TAB, KeyConfig.CODE_ESC, KeyConfig.CODE_LEFT, KeyConfig.CODE_RIGHT, KeyConfig.CODE_UP, KeyConfig.CODE_DOWN, KeyConfig.CODE_ABC, KeyConfig.CODE_MODE};
 
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, funcLabels);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);

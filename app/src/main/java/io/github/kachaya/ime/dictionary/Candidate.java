@@ -154,13 +154,13 @@ public class Candidate {
     public String getTypeBadge() {
         switch (type) {
             case LEARNING:
-                return " [学]";
+                return " [L]";
             case PREDICTION:
-                return " [予測]";
+                return " [P]";
             case SUGGESTION:
-                return " [予]";
+                return " [S]";
             case ZENZ:
-                return " [Zenz]";
+                return " [Z]";
             default:
                 return "";
         }
@@ -180,7 +180,7 @@ public class Candidate {
         SpannableStringBuilder ssb = new SpannableStringBuilder(baseText);
         int start = ssb.length();
         ssb.append(badge);
-        ssb.setSpan(new RelativeSizeSpan(0.5f), start, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        ssb.setSpan(new RelativeSizeSpan(0.45f), start, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         ssb.setSpan(new ForegroundColorSpan(0xFF888888), start, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return ssb;
     }

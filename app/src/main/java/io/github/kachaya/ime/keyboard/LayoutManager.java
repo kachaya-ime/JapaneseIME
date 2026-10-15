@@ -36,6 +36,7 @@ public class LayoutManager {
         add(new KeyConfig(KeyConfig.CODE_BACKSPACE));
         add(new KeyConfig(KeyConfig.CODE_SHIFT));
         add(new KeyConfig(KeyConfig.CODE_CTRL));
+        add(new KeyConfig(KeyConfig.CODE_MODE));
         add(new KeyConfig(KeyConfig.CODE_TAB));
         add(new KeyConfig(KeyConfig.CODE_LEFT));
         add(new KeyConfig(KeyConfig.CODE_UP));

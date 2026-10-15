@@ -1125,6 +1125,15 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
+     * 英語モード（半角英数）と日本語モード（ひらがな）を交互に切り替えます。
+     */
+    public void toggleEnglishJapanese() {
+        if (mEngine != null) {
+            mEngine.toggleEnglishJapanese();
+        }
+    }
+
+    /**
      * Ctrl キーとの組み合わせ入力を処理します。
      *
      * @param keyCode KeyEvent で定義されているキーコード

@@ -47,7 +47,7 @@
     { "label": "⌫", "code": "BACKSPACE", "weight": 1.5 }
   ],
   [
-    { "label": "Ctrl", "code": "CTRL", "weight": 1.5 },
+    { "label": "あ/A", "code": "MODE", "weight": 1.5 },
     { "label": "@!?", "code": "SYM" },
     { "label": "," },
     { "label": "⌴", "code": "SPACE", "weight": 2.0 },

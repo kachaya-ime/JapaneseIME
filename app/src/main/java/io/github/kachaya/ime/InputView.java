@@ -658,6 +658,12 @@ public class InputView extends LinearLayout {
                     mIsShifted = mIsShiftLocked;
                     updateKeys();
                     break;
+                case KeyConfig.CODE_MODE:
+                    if (mInputService != null) {
+                        mInputService.toggleEnglishJapanese();
+                    }
+                    resetModifiers();
+                    break;
                 case KeyConfig.CODE_TAB:
                     if (mIsControl) {
                         mInputService.handleCtrlKey(KeyEvent.KEYCODE_TAB);
@@ -863,7 +869,7 @@ public class InputView extends LinearLayout {
      * @param isUserDict ユーザー辞書由来の候補かどうか
      * @return 生成された Button
      */
-    private Button createCandidateButton(ViewGroup parent, int index, String text, boolean isUserDict) {
+    private Button createCandidateButton(ViewGroup parent, int index, CharSequence text, boolean isUserDict) {
         Button b = (Button) LayoutInflater.from(getContext()).inflate(R.layout.candidate_inputview_chip_item, parent, false);
         b.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
         if (mAdjustedCandidateHeight > 0) {
@@ -930,11 +936,11 @@ public class InputView extends LinearLayout {
             Candidate c = filtered.get(i);
             CharSequence formatted = c.getFormattedText(c.candidate);
 
-            Button b = createCandidateButton(mCandidatesLayout, i, formatted.toString(), c.isLearningWord());
+            Button b = createCandidateButton(mCandidatesLayout, i, formatted, c.isLearningWord());
             mCandidatesLayout.addView(b);
             mCandidateButton[i] = b;
 
-            Button chip = createCandidateButton(mCandidateExpandedFlexbox, i, formatted.toString(), c.isLearningWord());
+            Button chip = createCandidateButton(mCandidateExpandedFlexbox, i, formatted, c.isLearningWord());
             mCandidateExpandedFlexbox.addView(chip);
         }
         selectCandidate(0);
