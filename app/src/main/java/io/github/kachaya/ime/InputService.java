@@ -199,6 +199,12 @@ public class InputService extends InputMethodService implements SharedPreference
 
         // 2. その他の静的なデフォルト値を XML から適用（既存の設定は壊さない）
         PreferenceManager.setDefaultValues(context, R.xml.root_preferences, false);
+        PreferenceManager.setDefaultValues(context, R.xml.pref_input_engine, false);
+        PreferenceManager.setDefaultValues(context, R.xml.pref_soft_keyboard, false);
+        PreferenceManager.setDefaultValues(context, R.xml.pref_physical_keyboard, false);
+        PreferenceManager.setDefaultValues(context, R.xml.pref_display_ui, false);
+        PreferenceManager.setDefaultValues(context, R.xml.pref_dictionary, false);
+        PreferenceManager.setDefaultValues(context, R.xml.pref_backup_reset, false);
     }
 
     /**

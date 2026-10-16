@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="辞書・学習設定"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="enable_learning"
+            android:summary="変換結果をユーザー辞書に保存します"
+            android:title="変換学習を有効にする" />
+
+        <Preference
+            android:key="user_dictionary_tool"
+            android:summary="学習された単語の一覧表示・編集・削除を行います"
+            android:title="@string/title_dictionary_tool">
+            <intent
+                android:targetClass="io.github.kachaya.ime.LearningDictionaryTool"
+                android:targetPackage="io.github.kachaya.ime" />
+        </Preference>
+
+        <Preference
+            android:key="prediction_dictionary_tool"
+            android:summary="連続単語の接続学習（Bigram）の一覧表示・削除を行います"
+            android:title="予測辞書ツール（接続学習）">
+            <intent
+                android:targetClass="io.github.kachaya.ime.PredictionDictionaryTool"
+                android:targetPackage="io.github.kachaya.ime" />
+        </Preference>
+    </PreferenceCategory>
+
+</PreferenceScreen>

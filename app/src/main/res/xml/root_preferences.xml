@@ -1,525 +1,57 @@
-<PreferenceScreen
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    >
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory
-        android:title="入力設定"
-        app:iconSpaceReserved="false"
-        >
-        <ListPreference
-            android:defaultValue="japanese"
-            android:entries="@array/startup_modes"
-            android:entryValues="@array/startup_mode_values"
-            android:key="startup_mode"
-            android:title="起動時の入力モード"
-            app:useSimpleSummaryProvider="true"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="use_kuten_jp"
-            android:summaryOff="「.」で「．」を入力します"
-            android:summaryOn="「.」で「。」を入力します"
-            android:title="句点に「。」を使用する"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="use_touten_jp"
-            android:summaryOff="「,」で「，」を入力します"
-            android:summaryOn="「,」で「、」を入力します"
-            android:title="読点に「、」を使用する"
-            />
-        <SwitchPreference
-            android:defaultValue="false"
-            android:key="use_jisx0201_kana"
-            android:summary="qキーの切り替えに半角カタカナを含めます"
-            android:title="半角カタカナを使用する"
-            />
-        <SwitchPreference
-            android:defaultValue="false"
-            android:key="auto_ascii_mode"
-            android:summary="URI入力時に自動的に英字モードに切り替えます"
-            android:title="入力形式による自動モード切替"
-            />
-        <Preference
-            android:key="ctrl_shortcut_customizer"
-            android:summary="Ctrlキーや特殊キー（Space, Enter, Tab, Backspace等）のショートカット機能をカスタマイズします"
-            android:title="ショートカットキーのカスタマイズ">
-            <intent
-                android:targetClass="io.github.kachaya.ime.ShortcutActivity"
-                android:targetPackage="io.github.kachaya.ime" />
-        </Preference>
-    </PreferenceCategory>
+    <Preference
+        android:title="入力・変換エンジン設定"
+        android:summary="起動時の入力モード、句読点、変換エンジン (Viterbi / Zenz) や生成パラメータ"
+        app:fragment="io.github.kachaya.ime.SettingsActivity$InputEngineFragment"
+        app:iconSpaceReserved="false" />
 
-    <PreferenceCategory
-        android:title="表示設定"
-        app:iconSpaceReserved="false"
-        >
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="show_status_bar_icon"
-            android:summary="ステータスバーに現在のモードアイコンを表示します"
-            android:title="ステータスバーのモードアイコン表示"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="show_annotation"
-            android:summary="候補表示時に注釈（;以降）を表示します"
-            android:title="候補の注釈を表示"
-            />
-        <SwitchPreference
-            android:defaultValue="false"
-            android:key="keep_candidate_bar_visible"
-            android:summary="候補がない状態でも候補バーを非表示にしません"
-            android:title="候補バーを常に表示"
-            />
-        <SeekBarPreference
-            android:defaultValue="1"
-            android:key="tooltip_duration_sec"
-            android:max="5"
-            android:min="0"
-            android:summary="モード変更時のツールチップ表示時間を設定します（0で非表示）"
-            android:title="ツールチップ表示時間"
-            app:showSeekBarValue="true"
-            app:updatesContinuously="true"
-            />
-        <ListPreference
-            android:defaultValue="top"
-            android:entries="@array/tooltip_positions"
-            android:entryValues="@array/tooltip_position_values"
-            android:key="tooltip_position"
-            android:title="ツールチップ表示位置"
-            app:useSimpleSummaryProvider="true"
-            />
-    </PreferenceCategory>
+    <Preference
+        android:title="画面キーボード設定"
+        android:summary="キーボードの種類、テーマ、バイブレーション、フォントサイズ、個別サイズ・配置"
+        app:fragment="io.github.kachaya.ime.SettingsActivity$SoftKeyboardFragment"
+        app:iconSpaceReserved="false" />
 
-    <PreferenceCategory
-        android:title="物理キーボード基本設定"
-        app:iconSpaceReserved="false"
-        >
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="physical_keyboard_show_symbol_bar"
-            android:summary="物理キーボード使用時に画面下に記号バーを表示します"
-            android:title="記号バーを表示"
-            />
-        <Preference
-            android:key="open_system_hard_keyboard_settings"
-            android:summary="システムの言語と入力（物理キーボード・レイアウト）設定を開きます"
-            android:title="OSの物理キーボード設定を開く"
-            />
-    </PreferenceCategory>
-
-    <PreferenceCategory
+    <Preference
         android:key="category_mode_keys"
-        android:title="モード切替キー割り当て"
-        app:iconSpaceReserved="false"
-        >
-        <Preference
-            android:key="physical_key_toggle_en_jp"
-            android:summary="物理キーを押して変更"
-            android:title="日英切り替えキー"
-            />
-        <Preference
-            android:key="physical_key_japanese_mode"
-            android:summary="物理キーを押して変更"
-            android:title="日本語モード変更キー"
-            />
-        <Preference
-            android:key="physical_key_english_mode"
-            android:summary="物理キーを押して変更"
-            android:title="英語モード変更キー"
-            />
-    </PreferenceCategory>
+        android:title="物理キーボード設定"
+        android:summary="記号バー表示、モード切替キー割り当て、ショートカットカスタマイズ、OS設定"
+        app:fragment="io.github.kachaya.ime.SettingsActivity$PhysicalKeyboardFragment"
+        app:iconSpaceReserved="false" />
 
-    <PreferenceCategory
-        android:title="画面キーボード一般設定"
-        app:iconSpaceReserved="false"
-        >
-        <ListPreference
-            android:defaultValue="qwerty"
-            android:entries="@array/keyboard_types"
-            android:entryValues="@array/keyboard_type_values"
-            android:key="keyboard_type"
-            android:title="キーボードの種類"
-            app:useSimpleSummaryProvider="true"
-            />
-        <ListPreference
-            android:defaultValue="auto"
-            android:entries="@array/keyboard_themes"
-            android:entryValues="@array/keyboard_theme_values"
-            android:key="keyboard_theme"
-            android:title="キーボードのテーマ"
-            app:useSimpleSummaryProvider="true"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="haptic_feedback"
-            android:summary="画面キーボードタップ時に触覚フィードバックをおこないます"
-            android:title="キー操作時のバイブレーション"
-            />
-        <ListPreference
-            android:defaultValue="24"
-            android:entries="@array/candidate_font_sizes"
-            android:entryValues="@array/candidate_font_size_values"
-            android:key="candidate_font_size"
-            android:title="候補のフォントサイズ"
-            app:useSimpleSummaryProvider="true"
-            />
-    </PreferenceCategory>
+    <Preference
+        android:title="表示・UI設定"
+        android:summary="ステータスバーアイコン、候補の注釈表示、候補バー常時表示、ツールチップ設定"
+        app:fragment="io.github.kachaya.ime.SettingsActivity$DisplayUiFragment"
+        app:iconSpaceReserved="false" />
 
-    <PreferenceCategory
-        android:title="画面キーボードなしの設定"
-        app:iconSpaceReserved="false"
-        >
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="floating_candidate_none"
-            android:summary="変換候補をフローティングポップアップで表示します"
-            android:title="フローティング表示"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="floating_candidate_physical_none"
-            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
-            android:title="物理キーボード接続時のフローティング表示"
-            />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        android:title="記号バー設定"
-        app:iconSpaceReserved="false"
-        >
-        <ListPreference
-            android:defaultValue="1.0"
-            android:entries="@array/keyboard_heights"
-            android:entryValues="@array/keyboard_height_values"
-            android:key="keyboard_height_scale_symbols"
-            android:title="キーボードの高さ"
-            app:useSimpleSummaryProvider="true"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="floating_candidate_symbols"
-            android:summary="変換候補をフローティングポップアップで表示します"
-            android:title="フローティング表示"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="floating_candidate_physical_symbols"
-            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
-            android:title="フローティング表示"
-            />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        android:title="QWERTYキーボード設定"
-        app:iconSpaceReserved="false"
-        >
-        <ListPreference
-            android:defaultValue="1.0"
-            android:entries="@array/keyboard_heights"
-            android:entryValues="@array/keyboard_height_values"
-            android:key="keyboard_height_scale_qwerty"
-            android:title="キーボードの高さ"
-            app:useSimpleSummaryProvider="true"
-            />
-        <SwitchPreference
-            android:defaultValue="false"
-            android:key="floating_candidate_qwerty"
-            android:summary="変換候補をフローティングポップアップで表示します"
-            android:title="フローティング表示"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="floating_candidate_physical_qwerty"
-            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
-            android:title="物理キーボード接続時のフローティング表示"
-            />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        android:title="Tabletキーボード設定"
-        app:iconSpaceReserved="false"
-        >
-        <ListPreference
-            android:defaultValue="right"
-            android:entries="@array/stroke_aligns"
-            android:entryValues="@array/stroke_align_values"
-            android:key="tablet_align"
-            android:title="キーボードの寄せ方向"
-            app:useSimpleSummaryProvider="true"
-            />
-        <ListPreference
-            android:defaultValue="1.0"
-            android:entries="@array/stroke_widths"
-            android:entryValues="@array/stroke_width_values"
-            android:key="tablet_width_scale"
-            android:title="キーボードの幅"
-            app:useSimpleSummaryProvider="true"
-            />
-        <ListPreference
-            android:defaultValue="1.0"
-            android:entries="@array/keyboard_heights"
-            android:entryValues="@array/keyboard_height_values"
-            android:key="keyboard_height_scale_tablet"
-            android:title="キーボードの高さ"
-            app:useSimpleSummaryProvider="true"
-            />
-        <SwitchPreference
-            android:defaultValue="false"
-            android:key="floating_candidate_tablet"
-            android:summary="変換候補をフローティングポップアップで表示します"
-            android:title="フローティング表示"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="floating_candidate_physical_tablet"
-            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
-            android:title="物理キーボード接続時のフローティング表示"
-            />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        android:title="ストロークキーボード設定"
-        app:iconSpaceReserved="false"
-        >
-        <ListPreference
-            android:defaultValue="right"
-            android:entries="@array/stroke_aligns"
-            android:entryValues="@array/stroke_align_values"
-            android:key="stroke_align"
-            android:title="キーボードの寄せ方向"
-            app:useSimpleSummaryProvider="true"
-            />
-        <ListPreference
-            android:defaultValue="1.0"
-            android:entries="@array/stroke_widths"
-            android:entryValues="@array/stroke_width_values"
-            android:key="stroke_width_scale"
-            android:title="キーボードの幅"
-            app:useSimpleSummaryProvider="true"
-            />
-        <ListPreference
-            android:defaultValue="1.0"
-            android:entries="@array/keyboard_heights"
-            android:entryValues="@array/keyboard_height_values"
-            android:key="keyboard_height_scale_stroke"
-            android:title="キーボードの高さ"
-            app:useSimpleSummaryProvider="true"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="floating_candidate_stroke"
-            android:summary="変換候補をフローティングポップアップで表示します"
-            android:title="フローティング表示"
-            />
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="floating_candidate_physical_stroke"
-            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
-            android:title="物理キーボード接続時のフローティング表示"
-            />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        android:title="画面キーボード配列のカスタマイズ"
-        app:iconSpaceReserved="false"
-        >
-        <Preference
-            android:key="symbols_customizer"
-            android:summary="記号バーのキー配列をカスタマイズします"
-            android:title="記号バーのカスタマイズ"
-            >
-            <intent
-                android:targetClass="io.github.kachaya.ime.keyboard.KeyboardCustomizerActivity"
-                android:targetPackage="io.github.kachaya.ime"
-                >
-                <extra android:name="pref_key"
-                    android:value="combined_symbols"
-                    />
-                <extra android:name="title"
-                    android:value="記号バーのカスタマイズ"
-                    />
-            </intent>
-        </Preference>
-
-        <Preference
-            android:key="keyboard_customizer_qwerty"
-            android:summary="QWERTYキーボードのキー配列をカスタマイズします"
-            android:title="QWERTYキー配列のカスタマイズ"
-            >
-            <intent
-                android:targetClass="io.github.kachaya.ime.keyboard.KeyboardCustomizerActivity"
-                android:targetPackage="io.github.kachaya.ime"
-                >
-                <extra android:name="pref_key"
-                    android:value="custom_qwerty_layout"
-                    />
-                <extra android:name="title"
-                    android:value="QWERTY配列のカスタマイズ"
-                    />
-            </intent>
-        </Preference>
-
-        <Preference
-            android:key="keyboard_customizer_tablet"
-            android:summary="Tabletキーボードのキー配列をカスタマイズします"
-            android:title="Tabletキー配列のカスタマイズ"
-            >
-            <intent
-                android:targetClass="io.github.kachaya.ime.keyboard.KeyboardCustomizerActivity"
-                android:targetPackage="io.github.kachaya.ime"
-                >
-                <extra android:name="pref_key"
-                    android:value="custom_tablet_layout"
-                    />
-                <extra android:name="title"
-                    android:value="Tablet配列のカスタマイズ"
-                    />
-            </intent>
-        </Preference>
-    </PreferenceCategory>
-
-    <PreferenceCategory
+    <Preference
         android:title="辞書・学習設定"
-        app:iconSpaceReserved="false"
-        >
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="enable_learning"
-            android:summary="変換結果をユーザー辞書に保存します"
-            android:title="変換学習を有効にする"
-            />
-        <Preference
-            android:key="user_dictionary_tool"
-            android:summary="学習された単語の一覧表示・編集・削除を行います"
-            android:title="@string/title_dictionary_tool"
-            >
-            <intent
-                android:targetClass="io.github.kachaya.ime.LearningDictionaryTool"
-                android:targetPackage="io.github.kachaya.ime"
-                />
-        </Preference>
-        <Preference
-            android:key="prediction_dictionary_tool"
-            android:summary="連続単語の接続学習（Bigram）の一覧表示・削除を行います"
-            android:title="予測辞書ツール（接続学習）"
-            >
-            <intent
-                android:targetClass="io.github.kachaya.ime.PredictionDictionaryTool"
-                android:targetPackage="io.github.kachaya.ime"
-                />
-        </Preference>
-    </PreferenceCategory>
+        android:summary="変換学習の有効化、学習辞書ツール、予測辞書ツール"
+        app:fragment="io.github.kachaya.ime.SettingsActivity$DictionaryFragment"
+        app:iconSpaceReserved="false" />
 
-    <PreferenceCategory
-        android:title="バックアップ・復元"
-        app:iconSpaceReserved="false"
-        >
-        <Preference
-            android:key="backup_settings"
-            android:summary="現在の設定をバックアップファイルに保存します"
-            android:title="設定のバックアップ"
-            />
-        <Preference
-            android:key="restore_settings"
-            android:summary="保存したバックアップファイルから設定を復元します"
-            android:title="設定の復元"
-            />
-        <Preference
-            android:key="reset_settings"
-            android:summary="設定を初期状態に戻します（学習辞書は初期化されません）"
-            android:title="設定の初期化"
-            />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        android:title="かな漢字変換エンジン設定"
-        app:iconSpaceReserved="false"
-        >
-        <ListPreference
-            android:defaultValue="viterbi"
-            android:entries="@array/conversion_engine_entries"
-            android:entryValues="@array/conversion_engine_values"
-            android:key="conversion_engine"
-            android:title="変換エンジンの選択"
-            app:useSimpleSummaryProvider="true"
-            />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        android:title="Zenz LLM 変換設定 (llama.cpp)"
-        app:iconSpaceReserved="false"
-        >
-        <ListPreference
-            android:defaultValue="4"
-            android:entries="@array/zenz_thread_entries"
-            android:entryValues="@array/zenz_thread_values"
-            android:key="zenz_threads"
-            android:title="CPU スレッド数"
-            app:useSimpleSummaryProvider="true"
-            />
-        <ListPreference
-            android:defaultValue="512"
-            android:entries="@array/zenz_ctx_entries"
-            android:entryValues="@array/zenz_ctx_values"
-            android:key="zenz_ctx_size"
-            android:title="コンテキストサイズ (n_ctx)"
-            app:useSimpleSummaryProvider="true"
-            />
-        <EditTextPreference
-            android:defaultValue="16"
-            android:key="zenz_max_tokens"
-            android:title="最大生成トークン数 (max_tokens)"
-            app:useSimpleSummaryProvider="true"
-            />
-        <EditTextPreference
-            android:defaultValue="3"
-            android:key="zenz_max_candidates"
-            android:title="最大候補数 (max_candidates)"
-            app:useSimpleSummaryProvider="true"
-            />
-        <SwitchPreference
-            android:defaultValue="false"
-            android:key="zenz_use_context"
-            android:summaryOff="前文のテキストを参照せずに単体で変換します"
-            android:summaryOn="カーソル位置の直前テキストを変換文脈として参照します"
-            android:title="左文脈（前文）を参照する"
-            />
-        <EditTextPreference
-            android:defaultValue="0.0"
-            android:key="zenz_temperature"
-            android:summary="0.0 (Greedy Decoding)"
-            android:title="Temperature (サンプリング温度)"
-            />
-        <EditTextPreference
-            android:defaultValue="0.90"
-            android:key="zenz_top_p"
-            android:title="Top-P 厳密さ (Nucleus サンプリング)"
-            app:useSimpleSummaryProvider="true"
-            />
-        <EditTextPreference
-            android:defaultValue="50"
-            android:key="zenz_top_k"
-            android:title="Top-K サンプリング"
-            app:useSimpleSummaryProvider="true"
-            />
-    </PreferenceCategory>
+    <Preference
+        android:title="バックアップ・初期化"
+        android:summary="設定のバックアップファイルへの保存、復元、および初期化"
+        app:fragment="io.github.kachaya.ime.SettingsActivity$BackupResetFragment"
+        app:iconSpaceReserved="false" />
 
     <PreferenceCategory
         android:title="アプリ情報"
-        app:iconSpaceReserved="false"
-        >
+        app:iconSpaceReserved="false">
+
         <Preference
             app:key="app_version"
             app:selectable="false"
-            app:title="バージョン"
-            />
+            app:title="バージョン" />
+
         <Preference
             android:key="legal_info"
             android:summary="オープンソースライセンス、商標免責、および免責事項"
-            android:title="法的情報・ライセンス"
-            />
+            android:title="法的情報・ライセンス" />
     </PreferenceCategory>
+
 </PreferenceScreen>

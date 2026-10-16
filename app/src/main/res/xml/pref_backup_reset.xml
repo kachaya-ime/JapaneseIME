@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="バックアップ・復元・初期化"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="backup_settings"
+            android:summary="現在の設定をバックアップファイルに保存します"
+            android:title="設定のバックアップ" />
+
+        <Preference
+            android:key="restore_settings"
+            android:summary="保存したバックアップファイルから設定を復元します"
+            android:title="設定の復元" />
+
+        <Preference
+            android:key="reset_settings"
+            android:summary="設定を初期状態に戻します（学習辞書は初期化されません）"
+            android:title="設定の初期化" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

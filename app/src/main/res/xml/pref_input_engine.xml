@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="基本入力設定"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="japanese"
+            android:entries="@array/startup_modes"
+            android:entryValues="@array/startup_mode_values"
+            android:key="startup_mode"
+            android:title="起動時の入力モード"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="use_kuten_jp"
+            android:summaryOff="「.」で「．」を入力します"
+            android:summaryOn="「.」で「。」を入力します"
+            android:title="句点に「。」を使用する" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="use_touten_jp"
+            android:summaryOff="「,」で「，」を入力します"
+            android:summaryOn="「,」で「、」を入力します"
+            android:title="読点に「、」を使用する" />
+
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="auto_ascii_mode"
+            android:summary="URI入力時に自動的に英字モードに切り替えます"
+            android:title="入力形式による自動モード切替" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="かな漢字変換エンジン"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="viterbi"
+            android:entries="@array/conversion_engine_entries"
+            android:entryValues="@array/conversion_engine_values"
+            android:key="conversion_engine"
+            android:title="変換エンジンの選択"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Zenz LLM 変換設定 (llama.cpp)"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="4"
+            android:entries="@array/zenz_thread_entries"
+            android:entryValues="@array/zenz_thread_values"
+            android:key="zenz_threads"
+            android:title="CPU スレッド数"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            android:defaultValue="512"
+            android:entries="@array/zenz_ctx_entries"
+            android:entryValues="@array/zenz_ctx_values"
+            android:key="zenz_ctx_size"
+            android:title="コンテキストサイズ (n_ctx)"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:defaultValue="16"
+            android:key="zenz_max_tokens"
+            android:title="最大生成トークン数 (max_tokens)"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:defaultValue="3"
+            android:key="zenz_max_candidates"
+            android:title="最大候補数 (max_candidates)"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="zenz_use_context"
+            android:summaryOff="前文のテキストを参照せずに単体で変換します"
+            android:summaryOn="カーソル位置の直前テキストを変換文脈として参照します"
+            android:title="左文脈（前文）を参照する" />
+
+        <EditTextPreference
+            android:defaultValue="0.0"
+            android:key="zenz_temperature"
+            android:summary="0.0 (Greedy Decoding)"
+            android:title="Temperature (サンプリング温度)" />
+
+        <EditTextPreference
+            android:defaultValue="0.90"
+            android:key="zenz_top_p"
+            android:title="Top-P 厳密さ (Nucleus サンプリング)"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:defaultValue="50"
+            android:key="zenz_top_k"
+            android:title="Top-K サンプリング"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

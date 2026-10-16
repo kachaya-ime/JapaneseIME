@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="表示・UI設定"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="show_status_bar_icon"
+            android:summary="ステータスバーに現在のモードアイコンを表示します"
+            android:title="ステータスバーのモードアイコン表示" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="show_annotation"
+            android:summary="候補表示時に注釈（;以降）を表示します"
+            android:title="候補の注釈を表示" />
+
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="keep_candidate_bar_visible"
+            android:summary="候補がない状態でも候補バーを非表示にしません"
+            android:title="候補バーを常に表示" />
+
+        <SeekBarPreference
+            android:defaultValue="1"
+            android:key="tooltip_duration_sec"
+            android:max="5"
+            android:min="0"
+            android:summary="モード変更時のツールチップ表示時間を設定します（0で非表示）"
+            android:title="ツールチップ表示時間"
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true" />
+
+        <ListPreference
+            android:defaultValue="top"
+            android:entries="@array/tooltip_positions"
+            android:entryValues="@array/tooltip_position_values"
+            android:key="tooltip_position"
+            android:title="ツールチップ表示位置"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

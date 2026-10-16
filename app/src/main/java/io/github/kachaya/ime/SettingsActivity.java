@@ -19,8 +19,8 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
-import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
@@ -28,9 +28,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -38,7 +35,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.concurrent.Executors;
 
 import io.github.kachaya.ime.keyboard.KeyConfig;
 import io.github.kachaya.ime.keyboard.LayoutManager;
@@ -48,10 +44,11 @@ import io.github.kachaya.ime.zenz.ZenzEngine;
 /**
  * 日本語入力の動作設定やカスタマイズを行うための設定画面アクティビティです。
  * <p>
- * Android Jetpack の Preference ライブラリを使用しており、すべての設定項目を一括管理します。
+ * Android Jetpack の PreferenceFragmentCompat を使用し、標準的なマルチフラグメント遷移でカテゴリごとの設定画面を表示します。
  * </p>
  */
-public class SettingsActivity extends AppCompatActivity {
+public class SettingsActivity extends AppCompatActivity implements
+        PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
 
     /** バックアップ設定を JSON ファイルとして出力するための ActivityResultLauncher。 */
     private final ActivityResultLauncher<String> mBackupLauncher = registerForActivityResult(
@@ -65,9 +62,6 @@ public class SettingsActivity extends AppCompatActivity {
             this::restoreSettings
     );
 
-    /** GGUF モデルファイルを選択するための ActivityResultLauncher。 */
-
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -75,46 +69,87 @@ public class SettingsActivity extends AppCompatActivity {
         if (savedInstanceState == null) {
             getSupportFragmentManager()
                     .beginTransaction()
-                    .replace(R.id.settings, new SettingsFragment())
+                    .replace(R.id.settings, new MainSettingsFragment())
                     .commit();
         }
+
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
             actionBar.setDisplayHomeAsUpEnabled(true);
             actionBar.setTitle(R.string.title_activity_settings);
         }
+
+        getSupportFragmentManager().addOnBackStackChangedListener(() -> {
+            if (getSupportFragmentManager().getBackStackEntryCount() == 0) {
+                if (getSupportActionBar() != null) {
+                    getSupportActionBar().setTitle(R.string.title_activity_settings);
+                }
+            }
+        });
+    }
+
+    @Override
+    public boolean onPreferenceStartFragment(@androidx.annotation.NonNull PreferenceFragmentCompat caller, @androidx.annotation.NonNull Preference pref) {
+        final Bundle args = pref.getExtras();
+        String fragmentClassName = pref.getFragment();
+        if (fragmentClassName == null) {
+            return false;
+        }
+        final Fragment fragment = getSupportFragmentManager().getFragmentFactory().instantiate(
+                getClassLoader(),
+                fragmentClassName);
+        fragment.setArguments(args);
+
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.settings, fragment)
+                .addToBackStack(null)
+                .commit();
+
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle(pref.getTitle());
+        }
+        return true;
     }
 
     @Override
     public boolean onSupportNavigateUp() {
+        if (getSupportFragmentManager().getBackStackEntryCount() > 0) {
+            getSupportFragmentManager().popBackStack();
+            return true;
+        }
         finish();
         return true;
     }
 
-    /**
-     * 設定画面のメインフラグメントクラスです。
-     */
-    public static class SettingsFragment extends PreferenceFragmentCompat {
-
+    /** トップレベルのメイン設定画面フラグメントです。 */
+    public static class MainSettingsFragment extends PreferenceFragmentCompat {
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             InputService.setupDefaultPreferences(getContext());
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
 
-            // 物理キー設定の初期化
-            setupKeyPref(PhysicalKeyBinding.KEY_TOGGLE_EN_JP, "日英切り替えキー");
-            setupKeyPref(PhysicalKeyBinding.KEY_JAPANESE_MODE, "日本語モード変更キー");
-            setupKeyPref(PhysicalKeyBinding.KEY_ENGLISH_MODE, "英語モード変更キー");
-
-            Preference openSystemKeyboardPref = findPreference("open_system_hard_keyboard_settings");
-            if (openSystemKeyboardPref != null) {
-                openSystemKeyboardPref.setOnPreferenceClickListener(preference -> {
-                    openSystemPhysicalKeyboardSettings();
+            Preference legalInfoPref = findPreference("legal_info");
+            if (legalInfoPref != null) {
+                legalInfoPref.setOnPreferenceClickListener(preference -> {
+                    if (getActivity() instanceof SettingsActivity) {
+                        ((SettingsActivity) getActivity()).showLegalInfoDialog();
+                    }
                     return true;
                 });
             }
 
-            updateKeyPrefEnabledState();
+            Preference versionPref = findPreference("app_version");
+            if (versionPref != null) {
+                versionPref.setSummary(BuildConfig.VERSION_NAME);
+            }
+        }
+    }
+
+    /** 1. 入力・変換エンジン設定フラグメント */
+    public static class InputEngineFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.pref_input_engine, rootKey);
 
             androidx.preference.ListPreference enginePref = findPreference(ZenzEngine.PREF_KEY_CONVERSION_ENGINE);
             if (enginePref != null) {
@@ -134,64 +169,6 @@ public class SettingsActivity extends AppCompatActivity {
                 boolean isZenz = ZenzEngine.ENGINE_ZENZ.equals(enginePref.getValue());
                 updateZenzPreferencesState(isZenz);
             }
-
-            Preference legalInfoPref = findPreference("legal_info");
-            if (legalInfoPref != null) {
-                legalInfoPref.setOnPreferenceClickListener(preference -> {
-                    if (getActivity() instanceof SettingsActivity) {
-                        ((SettingsActivity) getActivity()).showLegalInfoDialog();
-                    }
-                    return true;
-                });
-            }
-
-            // アプリバージョンのサマリーに現在のビルド情報を動的に反映
-            Preference versionPref = findPreference("app_version");
-            if (versionPref != null) {
-                versionPref.setSummary(BuildConfig.VERSION_NAME);
-            }
-
-            Preference backupPref = findPreference("backup_settings");
-            if (backupPref != null) {
-                backupPref.setOnPreferenceClickListener(preference -> {
-                    if (getActivity() instanceof SettingsActivity) {
-                        ((SettingsActivity) getActivity()).mBackupLauncher.launch("ime_backup.json");
-                    }
-                    return true;
-                });
-            }
-
-            Preference restorePref = findPreference("restore_settings");
-            if (restorePref != null) {
-                restorePref.setOnPreferenceClickListener(preference -> {
-                    if (getActivity() instanceof SettingsActivity) {
-                        ((SettingsActivity) getActivity()).mRestoreLauncher.launch(new String[]{"application/json", "text/plain"});
-                    }
-                    return true;
-                });
-            }
-
-            Preference resetPref = findPreference("reset_settings");
-            if (resetPref != null) {
-                resetPref.setOnPreferenceClickListener(preference -> {
-                    new AlertDialog.Builder(requireContext())
-                            .setTitle("設定の初期化")
-                            .setMessage("すべての設定を初期状態に戻しますか？\n（学習辞書は初期化されません）")
-                            .setPositiveButton("初期化", (dialog, which) -> {
-                                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-                                prefs.edit().clear().apply();
-                                LayoutManager.clearLayouts(requireContext());
-                                InputService.setupDefaultPreferences(requireContext());
-                                Toast.makeText(requireContext(), "設定を初期化しました", Toast.LENGTH_SHORT).show();
-                                if (getActivity() != null) {
-                                    getActivity().recreate();
-                                }
-                            })
-                            .setNegativeButton("キャンセル", null)
-                            .show();
-                    return true;
-                });
-            }
         }
 
         private void updateZenzPreferencesState(boolean isZenz) {
@@ -210,6 +187,34 @@ public class SettingsActivity extends AppCompatActivity {
                 if (pref != null) {
                     pref.setEnabled(isZenz);
                 }
+            }
+        }
+    }
+
+    /** 2. 画面キーボード設定フラグメント */
+    public static class SoftKeyboardFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.pref_soft_keyboard, rootKey);
+        }
+    }
+
+    /** 3. 物理キーボード設定フラグメント */
+    public static class PhysicalKeyboardFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.pref_physical_keyboard, rootKey);
+
+            setupKeyPref(PhysicalKeyBinding.KEY_TOGGLE_EN_JP, "日英切り替えキー");
+            setupKeyPref(PhysicalKeyBinding.KEY_JAPANESE_MODE, "日本語モード変更キー");
+            setupKeyPref(PhysicalKeyBinding.KEY_ENGLISH_MODE, "英語モード変更キー");
+
+            Preference openSystemKeyboardPref = findPreference("open_system_hard_keyboard_settings");
+            if (openSystemKeyboardPref != null) {
+                openSystemKeyboardPref.setOnPreferenceClickListener(preference -> {
+                    openSystemPhysicalKeyboardSettings();
+                    return true;
+                });
             }
         }
 
@@ -236,14 +241,6 @@ public class SettingsActivity extends AppCompatActivity {
 
             if (!launched) {
                 Toast.makeText(context, "システム設定画面を開けませんでした", Toast.LENGTH_SHORT).show();
-            }
-        }
-
-        private void updateKeyPrefEnabledState() {
-            PreferenceCategory category = findPreference("category_mode_keys");
-            if (category != null) {
-                category.setEnabled(true);
-                category.setSummary(null);
             }
         }
 
@@ -326,6 +323,72 @@ public class SettingsActivity extends AppCompatActivity {
             });
 
             dialog.show();
+        }
+    }
+
+    /** 4. 表示・UI設定フラグメント */
+    public static class DisplayUiFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.pref_display_ui, rootKey);
+        }
+    }
+
+    /** 5. 辞書・学習設定フラグメント */
+    public static class DictionaryFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.pref_dictionary, rootKey);
+        }
+    }
+
+    /** 6. バックアップ・初期化フラグメント */
+    public static class BackupResetFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.pref_backup_reset, rootKey);
+
+            Preference backupPref = findPreference("backup_settings");
+            if (backupPref != null) {
+                backupPref.setOnPreferenceClickListener(preference -> {
+                    if (getActivity() instanceof SettingsActivity) {
+                        ((SettingsActivity) getActivity()).mBackupLauncher.launch("ime_backup.json");
+                    }
+                    return true;
+                });
+            }
+
+            Preference restorePref = findPreference("restore_settings");
+            if (restorePref != null) {
+                restorePref.setOnPreferenceClickListener(preference -> {
+                    if (getActivity() instanceof SettingsActivity) {
+                        ((SettingsActivity) getActivity()).mRestoreLauncher.launch(new String[]{"application/json", "text/plain"});
+                    }
+                    return true;
+                });
+            }
+
+            Preference resetPref = findPreference("reset_settings");
+            if (resetPref != null) {
+                resetPref.setOnPreferenceClickListener(preference -> {
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle("設定の初期化")
+                            .setMessage("すべての設定を初期状態に戻しますか？\n（学習辞書は初期化されません）")
+                            .setPositiveButton("初期化", (dialog, which) -> {
+                                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+                                prefs.edit().clear().apply();
+                                LayoutManager.clearLayouts(requireContext());
+                                InputService.setupDefaultPreferences(requireContext());
+                                Toast.makeText(requireContext(), "設定を初期化しました", Toast.LENGTH_SHORT).show();
+                                if (getActivity() != null) {
+                                    getActivity().recreate();
+                                }
+                            })
+                            .setNegativeButton("キャンセル", null)
+                            .show();
+                    return true;
+                });
+            }
         }
     }
 
