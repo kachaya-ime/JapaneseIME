@@ -20,12 +20,12 @@ public class KeyShortcutManager {
     public static final int SHIFT_MASK = 0x10000;
 
     /**
-     * システムで予約されている Ctrl キー組み合わせ（Ctrl+A, Ctrl+C など）かどうかを判定します。
+     * OSで予約されている Ctrl キー組み合わせ（Ctrl+A, Ctrl+C など）かどうかを判定します。
      *
      * @param keyCode キーコード
-     * @return システム予約されている場合は true
+     * @return OS予約されている場合は true
      */
-    public static boolean isSystemReserved(int keyCode) {
+    public static boolean isOsReserved(int keyCode) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_A:
             case KeyEvent.KEYCODE_C:
@@ -40,10 +40,33 @@ public class KeyShortcutManager {
     }
 
     /**
-     * システム予約キーのラベルを取得します。
+     * 予約済み（OS予約またはIME予約）のキー組み合わせかどうかを判定します。
      *
      * @param keyCode キーコード
-     * @return システム予約機能の説明ラベル
+     * @return 予約済みの場合は true
+     */
+    public static boolean isReserved(int keyCode) {
+        if (isOsReserved(keyCode)) {
+            return true;
+        }
+        return keyCode == KeyEvent.KEYCODE_SPACE;
+    }
+
+    /**
+     * 後方互換性のためのエイリアス。
+     *
+     * @param keyCode キーコード
+     * @return 予約済みの場合は true
+     */
+    public static boolean isSystemReserved(int keyCode) {
+        return isReserved(keyCode);
+    }
+
+    /**
+     * 予約キーのラベルを取得します。
+     *
+     * @param keyCode キーコード
+     * @return 予約機能の説明ラベル
      */
     public static String getReservedLabel(int keyCode) {
         switch (keyCode) {
@@ -59,18 +82,22 @@ public class KeyShortcutManager {
                 return "システム予約 (やり直し)";
             case KeyEvent.KEYCODE_Z:
                 return "システム予約 (元に戻す)";
+            case KeyEvent.KEYCODE_SPACE:
+                return "IME予約 (日英切り替え)";
             default:
                 return "";
         }
     }
 
     /**
-     * デフォルトのキー割り当てマップを取得します（システム予約キー以外はすべて未設定）。
+     * デフォルトのキー割り当てマップを取得します（Ctrl+Space に日英切り替えを割り当て）。
      *
      * @return キーコードと InputAction のデフォルトマップ
      */
     public static Map<Integer, InputAction> getDefaultMappings() {
-        return new HashMap<>();
+        Map<Integer, InputAction> mappings = new HashMap<>();
+        mappings.put(KeyEvent.KEYCODE_SPACE, InputAction.TOGGLE_EN_JP);
+        return mappings;
     }
 
     /**
@@ -109,7 +136,7 @@ public class KeyShortcutManager {
                     mappings.put(keyCode, InputAction.fromId(actionId));
                 }
             }
-            if (json.has("SPACE")) {
+            if (json.has("SPACE") && !isReserved(KeyEvent.KEYCODE_SPACE)) {
                 mappings.put(KeyEvent.KEYCODE_SPACE, InputAction.fromId(json.getString("SPACE")));
             }
             if (json.has("ENTER")) {

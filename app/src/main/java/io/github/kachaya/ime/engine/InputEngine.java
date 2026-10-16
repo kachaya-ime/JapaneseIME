@@ -312,7 +312,7 @@ public class InputEngine {
         int key = keyCode;
         if (isShift) {
             key |= KeyShortcutManager.SHIFT_MASK;
-        } else if (KeyShortcutManager.isSystemReserved(keyCode)) {
+        } else if (KeyShortcutManager.isOsReserved(keyCode)) {
             return false;
         }
         InputAction action = (mShortcutMap != null) ? mShortcutMap.get(key) : null;

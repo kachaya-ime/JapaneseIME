@@ -923,7 +923,7 @@ public class InputService extends InputMethodService implements SharedPreference
         }
 
         // 物理キーボードによる日英・モード切替判定（KEY_LANGUAGE_SWITCH, Zenkaku/Hankaku, Fn + Q 等）
-        if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH || (mKeyToggleEnJp != null && mKeyToggleEnJp.matches(event))) {
+        if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH || keyCode == KeyEvent.KEYCODE_ZENKAKU_HANKAKU || (mKeyToggleEnJp != null && mKeyToggleEnJp.matches(event))) {
             logI("Toggle En/Jp key matched: keyCode=" + keyCode);
             if (mEngine != null) {
                 mEngine.toggleEnglishJapanese();
@@ -1097,6 +1097,9 @@ public class InputService extends InputMethodService implements SharedPreference
         if (isInputDisabled()) {
             return;
         }
+        if (isShifted && mEngine != null && mEngine.processShortcutKey(KeyEvent.KEYCODE_SPACE, true)) {
+            return;
+        }
         if (!mEngine.handleSpace(isShifted)) {
             sendKeyChar(' ');
         }
@@ -1147,12 +1150,6 @@ public class InputService extends InputMethodService implements SharedPreference
     void handleCtrlKey(int keyCode) {
         if (isInputDisabled()) {
             return;
-        }
-        if (keyCode == KeyEvent.KEYCODE_SPACE) {
-            if (mEngine != null) {
-                mEngine.toggleEnglishJapanese();
-                return;
-            }
         }
         if (mEngine != null && !mEngine.processShortcutKey(keyCode)) {
             // エンジンで消費されなかった場合は、Ctrl キーとの組み合わせとしてシステムに送信

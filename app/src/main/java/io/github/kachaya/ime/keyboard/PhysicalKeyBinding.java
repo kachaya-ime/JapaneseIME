@@ -132,11 +132,11 @@ public class PhysicalKeyBinding {
      * 設定キーに応じたデフォルトのシリアライズ文字列を取得します。
      *
      * @param prefKey 設定キー（例: "physical_key_toggle_en_jp"）
-     * @return デフォルトのシリアライズ文字列（「日英切り替えキー」は半角/全角、それ以外は "0"）
+     * @return デフォルトのシリアライズ文字列（「日英切り替えキー」は Ctrl + Space、それ以外は "0"）
      */
     public static String getDefaultSerialized(String prefKey) {
         if (KEY_TOGGLE_EN_JP.equals(prefKey)) {
-            return String.valueOf(KeyEvent.KEYCODE_ZENKAKU_HANKAKU);
+            return KeyEvent.KEYCODE_SPACE + ":" + KeyEvent.META_CTRL_ON;
         }
         return "0";
     }

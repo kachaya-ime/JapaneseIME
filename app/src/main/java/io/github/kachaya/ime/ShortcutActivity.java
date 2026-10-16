@@ -77,7 +77,7 @@ public class ShortcutActivity extends AppCompatActivity {
                 return;
             }
             if (item.isReserved) {
-                Toast.makeText(this, item.title + " はシステム予約のため変更できません", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, item.title + " は予約済みのため変更できません", Toast.LENGTH_SHORT).show();
             } else {
                 showActionChoiceDialog(item);
             }
@@ -107,7 +107,7 @@ public class ShortcutActivity extends AppCompatActivity {
 
         for (int i = 0; i < specialKeys.length; i++) {
             int key = specialKeys[i];
-            boolean isReserved = KeyShortcutManager.isSystemReserved(key);
+            boolean isReserved = KeyShortcutManager.isReserved(key);
             String summary;
             if (isReserved) {
                 summary = KeyShortcutManager.getReservedLabel(key);
@@ -147,7 +147,7 @@ public class ShortcutActivity extends AppCompatActivity {
         for (int keyCode = KeyEvent.KEYCODE_A; keyCode <= KeyEvent.KEYCODE_Z; keyCode++) {
             char letter = (char) ('A' + keyCode - KeyEvent.KEYCODE_A);
             String title = "Ctrl + " + letter;
-            boolean isReserved = KeyShortcutManager.isSystemReserved(keyCode);
+            boolean isReserved = KeyShortcutManager.isReserved(keyCode);
             String summary;
             if (isReserved) {
                 summary = KeyShortcutManager.getReservedLabel(keyCode);
