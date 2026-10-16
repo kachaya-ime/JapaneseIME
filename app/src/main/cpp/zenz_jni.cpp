@@ -1,3 +1,8 @@
+/**
+ * @file zenz_jni.cpp
+ * @brief llama.cpp と Android 日本語 IME (ZenzEngine) を接続する JNI ネイティブブリッジ実装です。
+ */
+
 #include <jni.h>
 #include <string>
 #include <vector>
@@ -11,23 +16,32 @@
 #include <android/log.h>
 #include "llama.h"
 
-#define TAG "ZenzJNI"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
-#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
-
+/**
+ * @brief llama.cpp の内部ログメッセージを Android Logcat (タグ: LlamaCPP) へ転送するコールバック関数です。
+ */
 static void zenz_llama_log_callback(enum ggml_log_level level, const char *text, void * /* user_data */) {
-    if (!text || text[0] == '\0') return;
-    if (strcmp(text, ".") == 0 || strcmp(text, ".\n") == 0 || strcmp(text, "\n") == 0) return;
+    if (!text || text[0] == '\0') {
+        return;
+    }
+    if (strcmp(text, ".") == 0 || strcmp(text, ".\n") == 0 || strcmp(text, "\n") == 0) {
+        return;
+    }
 
     int android_level = ANDROID_LOG_INFO;
-    if (level == GGML_LOG_LEVEL_ERROR) android_level = ANDROID_LOG_ERROR;
-    else if (level == GGML_LOG_LEVEL_WARN) android_level = ANDROID_LOG_WARN;
-    else if (level == GGML_LOG_LEVEL_DEBUG) android_level = ANDROID_LOG_DEBUG;
+    if (level == GGML_LOG_LEVEL_ERROR) {
+        android_level = ANDROID_LOG_ERROR;
+    } else if (level == GGML_LOG_LEVEL_WARN) {
+        android_level = ANDROID_LOG_WARN;
+    } else if (level == GGML_LOG_LEVEL_DEBUG) {
+        android_level = ANDROID_LOG_DEBUG;
+    }
 
     __android_log_print(android_level, "LlamaCPP", "%s", text);
 }
 
+/**
+ * @brief ネイティブ層で保持する llama_model および llama_context の保持用構造体です。
+ */
 struct ZenzContext {
     llama_model *model = nullptr;
     llama_context *ctx = nullptr;
@@ -48,9 +62,9 @@ JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
 
 extern "C" {
 
-// パッケージ名 io.github.kachaya.ime.zenz.ZenzEngine に対応するJNIエクスポート
-// パッケージ名やクラス名自体にアンダースコアは含まれないため、Java_io_github_kachaya_ime_zenz_ZenzEngine_ の形式が正解です。
-
+/**
+ * GGUF モデルファイルを読み込み、llama_context を初期化します。
+ */
 JNIEXPORT jboolean JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeInit(
         JNIEnv *env, jobject /* this */, jstring jmodelPath, jint nThreads, jint nCtx, jint nGpuLayers) {
@@ -64,10 +78,14 @@ Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeInit(
             llama_free_model(g_zenz.model);
             g_zenz.model = nullptr;
         }
-        if (!jmodelPath) return JNI_FALSE;
+        if (!jmodelPath) {
+            return JNI_FALSE;
+        }
 
         const char *model_path = env->GetStringUTFChars(jmodelPath, nullptr);
-        if (!model_path) return JNI_FALSE;
+        if (!model_path) {
+            return JNI_FALSE;
+        }
 
         FILE *f = fopen(model_path, "rb");
         if (!f) {
@@ -81,7 +99,9 @@ Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeInit(
         g_zenz.model = llama_load_model_from_file(model_path, model_params);
         env->ReleaseStringUTFChars(jmodelPath, model_path);
 
-        if (!g_zenz.model) return JNI_FALSE;
+        if (!g_zenz.model) {
+            return JNI_FALSE;
+        }
 
         llama_context_params ctx_params = llama_context_default_params();
         ctx_params.n_ctx = nCtx > 0 ? nCtx : 512;
@@ -100,12 +120,18 @@ Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeInit(
     }
 }
 
+/**
+ * モデルおよび context が正常に読み込まれているか確認します。
+ */
 JNIEXPORT jboolean JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeIsLoaded(JNIEnv *env, jobject /* this */) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
     return (g_zenz.model != nullptr && g_zenz.ctx != nullptr) ? JNI_TRUE : JNI_FALSE;
 }
 
+/**
+ * モデルおよび context のリソースを解放します。
+ */
 JNIEXPORT void JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeClose(JNIEnv *env, jobject /* this */) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
@@ -119,71 +145,106 @@ Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeClose(JNIEnv *env, jobject /* t
     }
 }
 
+/**
+ * テキスト文字列をトークンID配列に変換します。
+ */
 JNIEXPORT jintArray JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeTokenize(
         JNIEnv *env, jobject /* this */, jstring jtext, jboolean parseSpecial) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
-    if (!g_zenz.model || !jtext) return nullptr;
+    if (!g_zenz.model || !jtext) {
+        return nullptr;
+    }
 
     const char *text_str = env->GetStringUTFChars(jtext, nullptr);
-    if (!text_str) return nullptr;
+    if (!text_str) {
+        return nullptr;
+    }
     std::string text(text_str);
     env->ReleaseStringUTFChars(jtext, text_str);
 
-    if (text.empty()) return env->NewIntArray(0);
+    if (text.empty()) {
+        return env->NewIntArray(0);
+    }
 
-    int n_tokens = -llama_tokenize(g_zenz.model, text.c_str(), text.length(), nullptr, 0, false, parseSpecial);
-    if (n_tokens <= 0) return env->NewIntArray(0);
+    int n_tokens = -llama_tokenize(g_zenz.model, text.c_str(), static_cast<int32_t>(text.length()), nullptr, 0, false, parseSpecial);
+    if (n_tokens <= 0) {
+        return env->NewIntArray(0);
+    }
 
     jintArray result = env->NewIntArray(n_tokens);
-    if (!result) return nullptr;
+    if (!result) {
+        return nullptr;
+    }
 
     jint *java_tokens = env->GetIntArrayElements(result, nullptr);
-    if (!java_tokens) return nullptr;
+    if (!java_tokens) {
+        return nullptr;
+    }
 
-    llama_tokenize(g_zenz.model, text.c_str(), text.length(), reinterpret_cast<llama_token *>(java_tokens), n_tokens, false, parseSpecial);
+    llama_tokenize(g_zenz.model, text.c_str(), static_cast<int32_t>(text.length()), reinterpret_cast<llama_token *>(java_tokens), n_tokens, false, parseSpecial);
     env->ReleaseIntArrayElements(result, java_tokens, 0);
 
     return result;
 }
 
+/**
+ * コンテキストの最大長(n_ctx)を取得します。
+ */
 JNIEXPORT jint JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeGetCtxSize(JNIEnv *env, jobject /* this */) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
-    return g_zenz.ctx ? llama_n_ctx(g_zenz.ctx) : 0;
+    if (g_zenz.ctx) {
+        return static_cast<jint>(llama_n_ctx(g_zenz.ctx));
+    }
+    return 0;
 }
 
+/**
+ * KV キャッシュを全消去します。
+ */
 JNIEXPORT void JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeClearKvCache(JNIEnv *env, jobject /* this */) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
-    if (g_zenz.ctx) llama_kv_cache_clear(g_zenz.ctx);
+    if (g_zenz.ctx) {
+        llama_kv_cache_clear(g_zenz.ctx);
+    }
 }
 
+/**
+ * 指定位置(pos)以降の KV キャッシュを削除します（Prefix Caching用）。
+ */
 JNIEXPORT void JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeClearKvCacheAfter(JNIEnv *env, jobject /* this */, jint pos) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
-    if (g_zenz.ctx) llama_kv_cache_seq_rm(g_zenz.ctx, 0, pos, -1);
+    if (g_zenz.ctx) {
+        llama_kv_cache_seq_rm(g_zenz.ctx, 0, pos, -1);
+    }
 }
 
+/**
+ * トークン列をデコード(評価)します。
+ */
 JNIEXPORT jboolean JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeEvalTokens(
         JNIEnv *env, jobject /* this */, jintArray jtokens, jint startPos, jint nTokens) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
-    if (!g_zenz.ctx || !jtokens || nTokens <= 0) return JNI_FALSE;
+    if (!g_zenz.ctx || !jtokens || nTokens <= 0) {
+        return JNI_FALSE;
+    }
 
     jint *tokens = env->GetIntArrayElements(jtokens, nullptr);
-    if (!tokens) return JNI_FALSE;
+    if (!tokens) {
+        return JNI_FALSE;
+    }
 
-    // 1. Zenzパッチ版の安全な生のCスタイルでバッチを初期化
     llama_batch batch = llama_batch_init(nTokens, 0, 1);
 
-    // 2. ループ内で直接生構造体のポインタの先を安全に埋める
     for (int i = 0; i < nTokens; ++i) {
         batch.token[i] = tokens[i];
         batch.pos[i] = startPos + i;
         batch.n_seq_id[i] = 1;
 
-        // パッチ版特有の2次元配列ポインタを安全にクリア
         if (batch.seq_id && batch.seq_id[i]) {
             batch.seq_id[i][0] = 0;
         }
@@ -192,24 +253,29 @@ Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeEvalTokens(
     }
     batch.n_tokens = nTokens;
 
-    // 3. デコード実行
     int ret = llama_decode(g_zenz.ctx, batch);
 
-    // 4. JNI要素の解放と、最優先での生バッチの即時解放（リーク防止）
     llama_batch_free(batch);
     env->ReleaseIntArrayElements(jtokens, tokens, JNI_ABORT);
 
     return ret == 0 ? JNI_TRUE : JNI_FALSE;
 }
 
+/**
+ * サンプリングパラメータ (temperature, topK, topP) に基づき次のトークンIDを1つサンプリングします。
+ */
 JNIEXPORT jint JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeSampleToken(
         JNIEnv *env, jobject /* this */, jfloat temperature, jint topK, jfloat topP) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
-    if (!g_zenz.ctx || !g_zenz.model) return -1;
+    if (!g_zenz.ctx || !g_zenz.model) {
+        return -1;
+    }
 
     float *logits = llama_get_logits(g_zenz.ctx);
-    if (!logits) return -1;
+    if (!logits) {
+        return -1;
+    }
 
     int n_vocab = llama_n_vocab(g_zenz.model);
     std::vector<llama_token_data> candidates;
@@ -220,21 +286,35 @@ Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeSampleToken(
 
     llama_token_data_array candidates_p = {candidates.data(), candidates.size(), false};
 
-    if (topK > 0) llama_sample_top_k(g_zenz.ctx, &candidates_p, topK, 1);
-    if (temperature > 0.0f && temperature != 1.0f) llama_sample_temp(g_zenz.ctx, &candidates_p, temperature);
-    else if (temperature <= 0.0f) return llama_sample_token_greedy(g_zenz.ctx, &candidates_p);
-    if (topP > 0.0f && topP < 1.0f) llama_sample_top_p(g_zenz.ctx, &candidates_p, topP, 1);
+    if (topK > 0) {
+        llama_sample_top_k(g_zenz.ctx, &candidates_p, topK, 1);
+    }
 
-    return llama_sample_token(g_zenz.ctx, &candidates_p);
+    if (temperature > 0.0f && temperature != 1.0f) {
+        llama_sample_temp(g_zenz.ctx, &candidates_p, temperature);
+        if (topP > 0.0f && topP < 1.0f) {
+            llama_sample_top_p(g_zenz.ctx, &candidates_p, topP, 1);
+        }
+        return llama_sample_token(g_zenz.ctx, &candidates_p);
+    } else {
+        return candidates_p.data[0].id;
+    }
 }
 
+/**
+ * 確率上位 K 個の候補トークンID配列を取得します（複数候補・分岐生成用）。
+ */
 JNIEXPORT jintArray JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeSampleTopKTokens(JNIEnv *env, jobject /* this */, jint k) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
-    if (!g_zenz.ctx || !g_zenz.model || k <= 0) return nullptr;
+    if (!g_zenz.ctx || !g_zenz.model || k <= 0) {
+        return nullptr;
+    }
 
     float *logits = llama_get_logits(g_zenz.ctx);
-    if (!logits) return nullptr;
+    if (!logits) {
+        return nullptr;
+    }
 
     int n_vocab = llama_n_vocab(g_zenz.model);
     std::vector<llama_token_data> candidates;
@@ -244,14 +324,19 @@ Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeSampleTopKTokens(JNIEnv *env, j
     }
 
     llama_token_data_array candidates_p = {candidates.data(), candidates.size(), false};
+
     llama_sample_top_k(g_zenz.ctx, &candidates_p, k, 1);
 
     int result_size = std::min(static_cast<int>(candidates_p.size), static_cast<int>(k));
     jintArray result = env->NewIntArray(result_size);
-    if (!result) return nullptr;
+    if (!result) {
+        return nullptr;
+    }
 
     jint *java_tokens = env->GetIntArrayElements(result, nullptr);
-    if (!java_tokens) return nullptr;
+    if (!java_tokens) {
+        return nullptr;
+    }
 
     for (int i = 0; i < result_size; ++i) {
         java_tokens[i] = candidates_p.data[i].id;
@@ -261,10 +346,15 @@ Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeSampleTopKTokens(JNIEnv *env, j
     return result;
 }
 
+/**
+ * トークンIDを対応する UTF-8 バイト配列(Piece)へ変換します。
+ */
 JNIEXPORT jbyteArray JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeTokenToPiece(JNIEnv *env, jobject /* this */, jint token) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
-    if (!g_zenz.model) return nullptr;
+    if (!g_zenz.model) {
+        return nullptr;
+    }
 
     std::vector<char> result(32);
     int n_tokens = llama_token_to_piece(g_zenz.model, token, result.data(), result.size());
@@ -273,19 +363,28 @@ Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeTokenToPiece(JNIEnv *env, jobje
         n_tokens = llama_token_to_piece(g_zenz.model, token, result.data(), result.size());
     }
 
-    if (n_tokens <= 0) return env->NewByteArray(0);
+    if (n_tokens <= 0) {
+        return env->NewByteArray(0);
+    }
 
     jbyteArray jbytes = env->NewByteArray(n_tokens);
-    if (!jbytes) return nullptr;
+    if (!jbytes) {
+        return nullptr;
+    }
 
     env->SetByteArrayRegion(jbytes, 0, n_tokens, reinterpret_cast<const jbyte *>(result.data()));
     return jbytes;
 }
 
+/**
+ * モデルの EOS (End of Sequence) トークンIDを取得します。
+ */
 JNIEXPORT jint JNICALL
 Java_io_github_kachaya_ime_zenz_ZenzEngine_nativeGetEosToken(JNIEnv *env, jobject /* this */) {
     std::lock_guard<std::mutex> lock(g_zenz.mtx);
-    if (!g_zenz.model) return -1;
+    if (!g_zenz.model) {
+        return -1;
+    }
     return static_cast<jint>(llama_token_eos(g_zenz.model));
 }
 

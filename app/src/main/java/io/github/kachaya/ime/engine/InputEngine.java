@@ -1401,6 +1401,15 @@ public class InputEngine {
 
         mSegmentManager.setSegments(segments);
 
+        // 文節分割状況のデバッグログ出力
+        Log.d("InputEngine", "=== [CONVERSION SEGMENT SPLIT LOG] ===");
+        Log.d("InputEngine", "Total Segments Count: " + segments.size());
+        for (int i = 0; i < segments.size(); i++) {
+            Segment seg = segments.get(i);
+            Log.d("InputEngine", " Segment[" + i + "]: reading=\"" + seg.reading + "\", selected=\"" + seg.getSelectedSurface() + "\", candidatesCount=" + seg.candidates.size());
+        }
+        Log.d("InputEngine", "======================================");
+
         changeState(InputStateConverting.INSTANCE);
         syncActiveSegment();
 
@@ -1723,16 +1732,7 @@ public class InputEngine {
                     List<Candidate> zenzConvertedCands = new ArrayList<>();
                     List<Candidate> plainReadingCands = new ArrayList<>();
 
-                    // 1. 新しく届いた zenzCandidate の振分け
-                    boolean isZenzPlain = isPlainReadingCandidate(nowQuery, zenzCandidate.candidate);
-                    if (isZenzPlain) {
-                        plainReadingCands.add(zenzCandidate);
-                    } else {
-                        zenzConvertedCands.add(zenzCandidate);
-                    }
-                    seen.add(zenzCandidate.candidate);
-
-                    // 2. 既存候補の振分け
+                    // 1. 既存候補の振分け（ブランチ0などの先行主候補の順序を保持）
                     for (Candidate c : currentCands) {
                         if (c != null && c.candidate != null && !c.candidate.isEmpty()) {
                             if (seen.add(c.candidate)) {
@@ -1742,6 +1742,16 @@ public class InputEngine {
                                     zenzConvertedCands.add(c);
                                 }
                             }
+                        }
+                    }
+
+                    // 2. 新しく届いた zenzCandidate は順序を崩さず末尾（右側）に追加
+                    if (seen.add(zenzCandidate.candidate)) {
+                        boolean isZenzPlain = isPlainReadingCandidate(nowQuery, zenzCandidate.candidate);
+                        if (isZenzPlain) {
+                            plainReadingCands.add(zenzCandidate);
+                        } else {
+                            zenzConvertedCands.add(zenzCandidate);
                         }
                     }
 

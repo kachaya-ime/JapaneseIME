@@ -452,11 +452,6 @@
         android:title="Zenz LLM 変換設定 (llama.cpp)"
         app:iconSpaceReserved="false"
         >
-        <Preference
-            android:key="zenz_model_select"
-            android:summary="未設定 (タップして .gguf モデルファイルを選択)"
-            android:title="GGUF モデルファイルの選択"
-            />
         <ListPreference
             android:defaultValue="4"
             android:entries="@array/zenz_thread_entries"
