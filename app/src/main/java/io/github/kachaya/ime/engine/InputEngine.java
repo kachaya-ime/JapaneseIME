@@ -1230,7 +1230,8 @@ public class InputEngine {
         String halfKatakana = RomajiConverter.toHalfKatakana(segmentReading);
 
         Set<String> seen = new HashSet<>();
-        List<Candidate> merged = new ArrayList<>();
+        List<Candidate> convertedCands = new ArrayList<>();
+        List<Candidate> plainCands = new ArrayList<>();
 
         if (preferredSurface != null && !preferredSurface.isEmpty()) {
             seen.add(preferredSurface);
@@ -1244,26 +1245,38 @@ public class InputEngine {
             if (prefCand == null) {
                 prefCand = new Candidate(preferredSurface, preferredSurface, "Zenz AI");
             }
-            merged.add(prefCand);
+            if (isPlainReadingCandidate(segmentReading, preferredSurface)) {
+                plainCands.add(prefCand);
+            } else {
+                convertedCands.add(prefCand);
+            }
         }
 
         for (Candidate c : rawCands) {
             if (c != null && c.candidate != null && !c.candidate.isEmpty()) {
                 if (seen.add(getCandidateDisplayKey(c))) {
-                    merged.add(c);
+                    if (isPlainReadingCandidate(segmentReading, c.candidate)) {
+                        plainCands.add(c);
+                    } else {
+                        convertedCands.add(c);
+                    }
                 }
             }
         }
 
         if (seen.add(segmentReading)) {
-            merged.add(new Candidate(segmentReading, segmentReading, "Zenz AI"));
+            plainCands.add(new Candidate(segmentReading, segmentReading, "Zenz AI"));
         }
         if (seen.add(wideKatakana)) {
-            merged.add(new Candidate(wideKatakana, wideKatakana, "Zenz AI"));
+            plainCands.add(new Candidate(wideKatakana, wideKatakana, "Zenz AI"));
         }
         if (seen.add(halfKatakana)) {
-            merged.add(new Candidate(halfKatakana, halfKatakana, "Zenz AI"));
+            plainCands.add(new Candidate(halfKatakana, halfKatakana, "Zenz AI"));
         }
+
+        List<Candidate> merged = new ArrayList<>();
+        merged.addAll(convertedCands);
+        merged.addAll(plainCands);
 
         return merged;
     }
@@ -1427,25 +1440,50 @@ public class InputEngine {
 
                     Segment active = mSegmentManager.getActiveSegment();
                     if (active != null) {
+                        String reading = active.reading != null ? active.reading : query;
                         List<Candidate> currentCands = active.candidates;
-                        List<Candidate> newCands = new ArrayList<>();
+
+                        List<Candidate> zenzCands = new ArrayList<>();
+                        List<Candidate> otherConvertedCands = new ArrayList<>();
+                        List<Candidate> plainReadingCands = new ArrayList<>();
                         Set<String> seen = new java.util.HashSet<>();
 
-                        // 1. 届いた Zenz 候補を最優先で追加し、重複管理に登録
-                        newCands.add(zenzCandidate);
-                        seen.add(zenzCandidate.candidate);
-
-                        // 2. 既存の候補（ビテルビや辞書候補）を重複を排除して後ろに連結
+                        // 1. 既存の候補を判定・振分け
                         for (Candidate c : currentCands) {
-                            if (seen.add(c.candidate)) {
-                                newCands.add(c);
+                            if (c != null && c.candidate != null && !c.candidate.isEmpty()) {
+                                if (seen.add(c.candidate)) {
+                                    if (isPlainReadingCandidate(reading, c.candidate)) {
+                                        plainReadingCands.add(c);
+                                    } else if (c.isZenz()) {
+                                        zenzCands.add(c);
+                                    } else {
+                                        otherConvertedCands.add(c);
+                                    }
+                                }
                             }
                         }
 
-                        // 3. 選択インデックスの自動調整
+                        // 2. 新しく届いた zenzCandidate を振分け（Zenz漢字候補グループ末尾または平文グループ）
+                        if (seen.add(zenzCandidate.candidate)) {
+                            if (isPlainReadingCandidate(reading, zenzCandidate.candidate)) {
+                                plainReadingCands.add(zenzCandidate);
+                            } else {
+                                zenzCands.add(zenzCandidate);
+                            }
+                        }
+
+                        // 3. 優先度順（Zenz漢字変換候補 -> その他漢字変換候補 -> ひらがな・カタカナ読みそのまま）で結合
+                        List<Candidate> newCands = new ArrayList<>();
+                        newCands.addAll(zenzCands);
+                        newCands.addAll(otherConvertedCands);
+                        newCands.addAll(plainReadingCands);
+
+                        // 4. 選択インデックスの自動調整
                         int updatedIndex = active.selectedIndex;
-                        if (updatedIndex >= 0) {
+                        if (updatedIndex > 0) {
                             updatedIndex++;
+                        } else {
+                            updatedIndex = 0;
                         }
 
                         mCandidateList = newCands;
@@ -1453,7 +1491,7 @@ public class InputEngine {
                         active.selectedIndex = updatedIndex;
                         mCurrentCandidateIndex = updatedIndex;
 
-                        // 4. UIの即時部分更新
+                        // 5. UIの即時部分更新
                         updateCandidates();
                         updateFloatingCandidates();
                         updateComposingText();
