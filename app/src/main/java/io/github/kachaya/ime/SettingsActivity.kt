@@ -1,0 +1,487 @@
+package io.github.kachaya.ime
+
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
+import android.net.Uri
+import android.os.Bundle
+import android.provider.Settings
+import android.util.Log
+import android.view.KeyEvent
+import android.view.LayoutInflater
+import android.view.View
+import android.webkit.WebView
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.Fragment
+import androidx.preference.ListPreference
+import androidx.preference.Preference
+import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceManager
+import io.github.kachaya.ime.keyboard.KeyConfig
+import io.github.kachaya.ime.keyboard.LayoutManager
+import io.github.kachaya.ime.keyboard.PhysicalKeyBinding
+import io.github.kachaya.ime.zenz.ZenzEngine
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.nio.charset.StandardCharsets
+import java.util.TreeMap
+
+/**
+ * 日本語入力の動作設定やカスタマイズを行うための設定画面アクティビティです。
+ */
+class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
+
+    val mBackupLauncher: ActivityResultLauncher<String> = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> backupSettings(uri) }
+
+    val mRestoreLauncher: ActivityResultLauncher<Array<String>> = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> restoreSettings(uri) }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.settings_activity)
+        if (savedInstanceState == null) {
+            supportFragmentManager
+                .beginTransaction()
+                .replace(R.id.settings, MainSettingsFragment())
+                .commit()
+        }
+
+        supportActionBar?.apply {
+            setDisplayHomeAsUpEnabled(true)
+            setTitle(R.string.title_activity_settings)
+        }
+
+        supportFragmentManager.addOnBackStackChangedListener {
+            if (supportFragmentManager.backStackEntryCount == 0) {
+                supportActionBar?.setTitle(R.string.title_activity_settings)
+            }
+        }
+    }
+
+    override fun onPreferenceStartFragment(caller: PreferenceFragmentCompat, pref: Preference): Boolean {
+        val args = pref.extras
+        val fragmentClassName = pref.fragment ?: return false
+        val fragment = supportFragmentManager.fragmentFactory.instantiate(
+            classLoader,
+            fragmentClassName
+        )
+        fragment.arguments = args
+
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.settings, fragment)
+            .addToBackStack(null)
+            .commit()
+
+        supportActionBar?.title = pref.title
+        return true
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        if (supportFragmentManager.backStackEntryCount > 0) {
+            supportFragmentManager.popBackStack()
+            return true
+        }
+        finish()
+        return true
+    }
+
+    class MainSettingsFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            InputService.setupDefaultPreferences(requireContext())
+            setPreferencesFromResource(R.xml.root_preferences, rootKey)
+
+            val legalInfoPref = findPreference<Preference>("legal_info")
+            legalInfoPref?.setOnPreferenceClickListener {
+                val act = activity
+                if (act is SettingsActivity) {
+                    act.showLegalInfoDialog()
+                }
+                true
+            }
+
+            val versionPref = findPreference<Preference>("app_version")
+            versionPref?.summary = BuildConfig.VERSION_NAME
+        }
+    }
+
+    class InputEngineFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_input_engine, rootKey)
+
+            val enginePref = findPreference<ListPreference>(ZenzEngine.PREF_KEY_CONVERSION_ENGINE)
+            if (enginePref != null) {
+                val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                if (!prefs.contains(ZenzEngine.PREF_KEY_CONVERSION_ENGINE)) {
+                    val zenzEnabled = prefs.getBoolean(ZenzEngine.PREF_KEY_ZENZ_ENABLED, false)
+                    enginePref.value = if (zenzEnabled) ZenzEngine.ENGINE_ZENZ else ZenzEngine.ENGINE_VITERBI
+                }
+
+                enginePref.setOnPreferenceChangeListener { _, newValue ->
+                    val isZenz = ZenzEngine.ENGINE_ZENZ == newValue
+                    prefs.edit().putBoolean(ZenzEngine.PREF_KEY_ZENZ_ENABLED, isZenz).apply()
+                    updateZenzPreferencesState(isZenz)
+                    true
+                }
+
+                val isZenz = ZenzEngine.ENGINE_ZENZ == enginePref.value
+                updateZenzPreferencesState(isZenz)
+            }
+        }
+
+        private fun updateZenzPreferencesState(isZenz: Boolean) {
+            val keys = arrayOf(
+                ZenzEngine.PREF_KEY_ZENZ_THREADS,
+                ZenzEngine.PREF_KEY_ZENZ_CTX_SIZE,
+                ZenzEngine.PREF_KEY_ZENZ_MAX_TOKENS,
+                ZenzEngine.PREF_KEY_ZENZ_MAX_CANDIDATES,
+                ZenzEngine.PREF_KEY_ZENZ_USE_CONTEXT,
+                ZenzEngine.PREF_KEY_ZENZ_TEMPERATURE,
+                ZenzEngine.PREF_KEY_ZENZ_TOP_P,
+                ZenzEngine.PREF_KEY_ZENZ_TOP_K
+            )
+            for (key in keys) {
+                val pref = findPreference<Preference>(key)
+                pref?.isEnabled = isZenz
+            }
+        }
+    }
+
+    class SoftKeyboardFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_soft_keyboard, rootKey)
+        }
+    }
+
+    class PhysicalKeyboardFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_physical_keyboard, rootKey)
+
+            setupKeyPref(PhysicalKeyBinding.KEY_TOGGLE_EN_JP, "日英切り替えキー")
+            setupKeyPref(PhysicalKeyBinding.KEY_JAPANESE_MODE, "日本語モード変更キー")
+            setupKeyPref(PhysicalKeyBinding.KEY_ENGLISH_MODE, "英語モード変更キー")
+
+            val openSystemKeyboardPref = findPreference<Preference>("open_system_hard_keyboard_settings")
+            openSystemKeyboardPref?.setOnPreferenceClickListener {
+                openSystemPhysicalKeyboardSettings()
+                true
+            }
+        }
+
+        private fun openSystemPhysicalKeyboardSettings() {
+            val ctx = requireContext()
+            val candidateIntents = arrayOf(
+                Intent(Settings.ACTION_HARD_KEYBOARD_SETTINGS),
+                Intent("android.settings.KEYBOARD_SETTINGS"),
+                Intent(Settings.ACTION_INPUT_METHOD_SETTINGS),
+                Intent("android.settings.INPUT_METHOD_AND_LANGUAGE_SETTINGS"),
+                Intent(Settings.ACTION_SETTINGS)
+            )
+
+            var launched = false
+            for (intent in candidateIntents) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    startActivity(intent)
+                    launched = true
+                    break
+                } catch (_: Exception) {
+                }
+            }
+
+            if (!launched) {
+                Toast.makeText(ctx, "システム設定画面を開けませんでした", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        private fun setupKeyPref(prefKey: String, title: String) {
+            setupKeyPref(prefKey, PhysicalKeyBinding.getDefaultSerialized(prefKey), title)
+        }
+
+        private fun setupKeyPref(prefKey: String, defaultSerialized: String, title: String) {
+            val pref = findPreference<Preference>(prefKey) ?: return
+            val ctx = requireContext()
+            val binding = PhysicalKeyBinding.load(ctx, prefKey)
+            pref.summary = binding.getDisplayLabel()
+
+            pref.setOnPreferenceClickListener {
+                showKeyCaptureDialog(pref, prefKey, defaultSerialized, title)
+                true
+            }
+        }
+
+        private fun showKeyCaptureDialog(pref: Preference, prefKey: String, defaultSerialized: String, title: String) {
+            val ctx = requireContext()
+            val currentBinding = PhysicalKeyBinding.load(ctx, prefKey)
+            val capturedBinding = arrayOf(currentBinding)
+
+            val dialogView = LayoutInflater.from(ctx).inflate(R.layout.dialog_key_capture, null)
+            val keyLabelText = dialogView.findViewById<TextView>(R.id.text_captured_key)
+            val buttonClear = dialogView.findViewById<Button>(R.id.button_clear)
+            val buttonResetDefault = dialogView.findViewById<Button>(R.id.button_reset_default)
+
+            keyLabelText.text = currentBinding.getDisplayLabel()
+
+            val dialog = AlertDialog.Builder(ctx)
+                .setTitle(title)
+                .setView(dialogView)
+                .setPositiveButton("保存") { _, _ ->
+                    PhysicalKeyBinding.save(ctx, prefKey, capturedBinding[0])
+                    pref.summary = capturedBinding[0].getDisplayLabel()
+                }
+                .setNegativeButton("キャンセル", null)
+                .create()
+
+            buttonClear.setOnClickListener {
+                val emptyBinding = PhysicalKeyBinding(0)
+                capturedBinding[0] = emptyBinding
+                keyLabelText.text = emptyBinding.getDisplayLabel()
+            }
+
+            buttonResetDefault.setOnClickListener {
+                val defaultBinding = PhysicalKeyBinding.deserialize(defaultSerialized)
+                capturedBinding[0] = defaultBinding
+                keyLabelText.text = defaultBinding.getDisplayLabel()
+            }
+
+            dialog.setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    if (keyCode == KeyEvent.KEYCODE_BACK && event.repeatCount == 0) {
+                        dialog.dismiss()
+                        return@setOnKeyListener true
+                    }
+
+                    if (keyCode == KeyEvent.KEYCODE_FUNCTION || keyCode == 119
+                        || keyCode == KeyEvent.KEYCODE_SHIFT_LEFT || keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT
+                        || keyCode == KeyEvent.KEYCODE_CTRL_LEFT || keyCode == KeyEvent.KEYCODE_CTRL_RIGHT
+                        || keyCode == KeyEvent.KEYCODE_ALT_LEFT || keyCode == KeyEvent.KEYCODE_ALT_RIGHT
+                    ) {
+                        return@setOnKeyListener true
+                    }
+
+                    val meta = PhysicalKeyBinding.getNormalizedMetaState(event)
+                    val binding = PhysicalKeyBinding(keyCode, meta)
+                    capturedBinding[0] = binding
+                    keyLabelText.text = binding.getDisplayLabel()
+                    return@setOnKeyListener true
+                }
+                false
+            }
+
+            dialog.show()
+        }
+    }
+
+    class DisplayUiFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_display_ui, rootKey)
+        }
+    }
+
+    class DictionaryFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_dictionary, rootKey)
+        }
+    }
+
+    class BackupResetFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_backup_reset, rootKey)
+
+            val backupPref = findPreference<Preference>("backup_settings")
+            backupPref?.setOnPreferenceClickListener {
+                val act = activity
+                if (act is SettingsActivity) {
+                    act.mBackupLauncher.launch("ime_backup.json")
+                }
+                true
+            }
+
+            val restorePref = findPreference<Preference>("restore_settings")
+            restorePref?.setOnPreferenceClickListener {
+                val act = activity
+                if (act is SettingsActivity) {
+                    act.mRestoreLauncher.launch(arrayOf("application/json", "text/plain"))
+                }
+                true
+            }
+
+            val resetPref = findPreference<Preference>("reset_settings")
+            resetPref?.setOnPreferenceClickListener {
+                AlertDialog.Builder(requireContext())
+                    .setTitle("設定の初期化")
+                    .setMessage("すべての設定を初期状態に戻しますか？\n（学習辞書は初期化されません）")
+                    .setPositiveButton("初期化") { _, _ ->
+                        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                        prefs.edit().clear().apply()
+                        LayoutManager.clearLayouts(requireContext())
+                        InputService.setupDefaultPreferences(requireContext())
+                        Toast.makeText(requireContext(), "設定を初期化しました", Toast.LENGTH_SHORT).show()
+                        activity?.recreate()
+                    }
+                    .setNegativeButton("キャンセル", null)
+                    .show()
+                true
+            }
+        }
+    }
+
+    private fun backupSettings(uri: Uri?) {
+        if (uri == null) {
+            return
+        }
+        try {
+            contentResolver.openOutputStream(uri, "wt").use { os ->
+                if (os == null) return
+                val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+                val allEntries = prefs.all
+                val sortedMap = TreeMap<String, Any?>()
+
+                for ((key, value) in allEntries) {
+                    if (key.endsWith("_normal") || key.endsWith("_shift") || key.endsWith("_symbol") ||
+                        key.endsWith("_primary") || key.endsWith("_secondary")
+                    ) {
+                        continue
+                    }
+                    sortedMap[key] = value
+                }
+
+                for (key in LayoutManager.getManagedKeys()) {
+                    val layoutStr = LayoutManager.loadLayout(this, key, "")
+                    if (layoutStr.isNotEmpty()) {
+                        sortedMap[key] = KeyConfig.layoutFromAnyString(layoutStr)
+                    }
+                }
+
+                val sb = StringBuilder()
+                sb.append("{\n")
+                var count = 0
+                val total = sortedMap.size
+                for ((key, value) in sortedMap) {
+                    sb.append("  \"").append(key).append("\": ")
+                    if (value is Array<*> && value.isArrayOf<Array<KeyConfig>>()) {
+                        @Suppress("UNCHECKED_CAST")
+                        sb.append(KeyConfig.layoutToJsonString(value as Array<Array<KeyConfig>>))
+                    } else if (value is String) {
+                        sb.append(JSONObject.quote(value))
+                    } else {
+                        sb.append(value)
+                    }
+                    if (++count < total) sb.append(",")
+                    sb.append("\n")
+                }
+                sb.append("}")
+
+                os.write(sb.toString().toByteArray(StandardCharsets.UTF_8))
+                Toast.makeText(this, "バックアップを保存しました", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "バックアップの保存に失敗しました: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun restoreSettings(uri: Uri?) {
+        if (uri == null) {
+            return
+        }
+        try {
+            contentResolver.openInputStream(uri).use { isStream ->
+                if (isStream == null) return
+                BufferedReader(InputStreamReader(isStream, StandardCharsets.UTF_8)).use { reader ->
+                    val sb = StringBuilder()
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        sb.append(line)
+                    }
+
+                    val json = JSONObject(sb.toString())
+                    val editor = PreferenceManager.getDefaultSharedPreferences(this).edit()
+
+                    val keys = json.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val value = json.get(key)
+
+                        if (value is JSONArray) {
+                            val jsonStr = value.toString()
+                            LayoutManager.saveLayout(this, key, jsonStr)
+                        } else if (value is Boolean) {
+                            editor.putBoolean(key, value)
+                        } else if (value is Int) {
+                            editor.putInt(key, value)
+                        } else if (value is Long) {
+                            editor.putLong(key, value)
+                        } else if (value is Double) {
+                            editor.putFloat(key, value.toFloat())
+                        } else if (value is Float) {
+                            editor.putFloat(key, value)
+                        } else if (value is String) {
+                            editor.putString(key, value)
+                        }
+                    }
+                    editor.putLong(LayoutManager.PREF_LAYOUT_UPDATED, System.currentTimeMillis())
+                    editor.apply()
+                    Toast.makeText(this, "設定を復元しました", Toast.LENGTH_SHORT).show()
+                    recreate()
+                }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "復元に失敗しました: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun showLegalInfoDialog() {
+        try {
+            val webView = WebView(this)
+            webView.loadUrl("file:///android_asset/legal_info.html")
+
+            AlertDialog.Builder(this)
+                .setTitle("法的情報・ライセンス")
+                .setView(webView)
+                .setPositiveButton("閉じる", null)
+                .show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "ライセンス情報の表示に失敗しました", Toast.LENGTH_SHORT).show()
+            Log.e("SettingsActivity", "Failed to load legal info HTML", e)
+        }
+    }
+
+    object PrefKeys {
+        const val KEYBOARD_TYPE_QWERTY = "qwerty"
+        const val KEYBOARD_TYPE_STROKE = "stroke"
+        const val KEYBOARD_TYPE_TABLET = "tablet"
+        const val KEYBOARD_TYPE_SYMBOLS = "symbols"
+        const val KEYBOARD_TYPE_NONE = "none"
+
+        const val KEYBOARD_TYPE = "keyboard_type"
+        const val KEYBOARD_THEME = "keyboard_theme"
+        const val AUTO_ASCII_MODE = "auto_ascii_mode"
+        const val STARTUP_MODE = "startup_mode"
+        const val SHOW_STATUS_BAR_ICON = "show_status_bar_icon"
+        const val TOOLTIP_DURATION_SEC = "tooltip_duration_sec"
+        const val TOOLTIP_POSITION = "tooltip_position"
+
+        const val PHYSICAL_KEYBOARD_SHOW_SYMBOL_BAR = "physical_keyboard_show_symbol_bar"
+        const val HAPTIC_FEEDBACK = "haptic_feedback"
+        const val SHOW_ANNOTATION = "show_annotation"
+        const val KEEP_CANDIDATE_BAR_VISIBLE = "keep_candidate_bar_visible"
+
+        const val STROKE_ALIGN = "stroke_align"
+        const val TABLET_ALIGN = "tablet_align"
+        const val STROKE_WIDTH_SCALE = "stroke_width_scale"
+        const val TABLET_WIDTH_SCALE = "tablet_width_scale"
+        const val KEYBOARD_HEIGHT_SCALE = "keyboard_height_scale"
+        const val CANDIDATE_HEIGHT_SCALE = "candidate_height_scale"
+        const val CANDIDATE_FONT_SIZE = "candidate_font_size"
+    }
+}

@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'application'
+    alias(libs.plugins.kotlin.jvm)
 }
 
 dependencies {
@@ -8,7 +9,7 @@ dependencies {
 }
 
 application {
-    mainClass = 'io.github.kachaya.ime.DictBuilder'
+    mainClass.set('io.github.kachaya.ime.DictBuilder')
 }
 
 jar {
@@ -16,7 +17,7 @@ jar {
         attributes 'Main-Class': 'io.github.kachaya.ime.DictBuilder'
     }
     from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+        configurations.runtimeClasspath.files.collect { it.isDirectory() ? it : zipTree(it) }
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
@@ -33,11 +34,17 @@ tasks.register('runDictBuilder', JavaExec) {
     group = 'application'
     description = 'Runs the DictBuilder tool'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'io.github.kachaya.ime.DictBuilder'
+    mainClass.set('io.github.kachaya.ime.DictBuilder')
     workingDir = rootProject.projectDir
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
 }
