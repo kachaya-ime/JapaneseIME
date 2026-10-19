@@ -41,7 +41,7 @@ import io.github.kachaya.ime.engine.InputModeFullKatakana
 import io.github.kachaya.ime.engine.InputModeFullLatin
 import io.github.kachaya.ime.engine.InputModeHalfKatakana
 import io.github.kachaya.ime.engine.InputModeHalfLatin
-import io.github.kachaya.ime.keyboard.PhysicalKeyBinding
+
 
 /**
  * 日本語入力メソッドのメインサービス実装です。
@@ -57,9 +57,6 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
     private var mPrefs: SharedPreferences? = null
 
     private var mAutoAsciiMode = false
-    private var mKeyToggleEnJp: PhysicalKeyBinding? = null
-    private var mKeyJapaneseMode: PhysicalKeyBinding? = null
-    private var mKeyEnglishMode: PhysicalKeyBinding? = null
 
     private var mTooltipDuration = 1000
     private var mTooltipPosition = "top"
@@ -508,9 +505,6 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
 
     private fun readPrefs() {
         val prefs = mPrefs ?: PreferenceManager.getDefaultSharedPreferences(this)
-        mKeyToggleEnJp = PhysicalKeyBinding.load(prefs, PhysicalKeyBinding.KEY_TOGGLE_EN_JP)
-        mKeyJapaneseMode = PhysicalKeyBinding.load(prefs, PhysicalKeyBinding.KEY_JAPANESE_MODE)
-        mKeyEnglishMode = PhysicalKeyBinding.load(prefs, PhysicalKeyBinding.KEY_ENGLISH_MODE)
         mTooltipDuration = prefs.getInt(PrefKeys.TOOLTIP_DURATION_SEC, 1) * 1000
         mTooltipPosition = prefs.getString(PrefKeys.TOOLTIP_POSITION, "top") ?: "top"
         mAutoAsciiMode = prefs.getBoolean(PrefKeys.AUTO_ASCII_MODE, false)
@@ -575,44 +569,28 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
     }
 
     override fun onKeyMultiple(keyCode: Int, count: Int, event: KeyEvent): Boolean {
-        logI("onKeyMultiple: keyCode=$keyCode (${PhysicalKeyBinding.getSingleKeyLabel(keyCode)}), count=$count")
+        logI("onKeyMultiple: keyCode=$keyCode (${KeyEvent.keyCodeToString(keyCode) ?: keyCode}), count=$count")
         return super.onKeyMultiple(keyCode, count, event)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        logI("onKeyDown: keyCode=$keyCode (${PhysicalKeyBinding.getSingleKeyLabel(keyCode)}), event=$event")
+        logI("onKeyDown: keyCode=$keyCode (${KeyEvent.keyCodeToString(keyCode) ?: keyCode}), event=$event")
         if (isInputDisabled()) {
             return super.onKeyDown(keyCode, event)
         }
 
         if (keyCode == KeyEvent.KEYCODE_PROG_RED) {
-            logI("Emoji key matched: keyCode=$keyCode (${PhysicalKeyBinding.getSingleKeyLabel(keyCode)})")
+            logI("Emoji key matched: keyCode=$keyCode (${KeyEvent.keyCodeToString(keyCode) ?: keyCode})")
             toggleEmojiPicker()
             return true
         }
 
         val engine = mEngine
 
-        if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH || keyCode == KeyEvent.KEYCODE_ZENKAKU_HANKAKU || mKeyToggleEnJp?.matches(event) == true) {
+        if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH || keyCode == KeyEvent.KEYCODE_ZENKAKU_HANKAKU) {
             logI("Toggle En/Jp key matched: keyCode=$keyCode")
             if (engine != null) {
                 engine.toggleEnglishJapanese()
-                return true
-            }
-        }
-
-        if (mKeyEnglishMode?.matches(event) == true) {
-            logI("mKeyEnglishMode matched: keyCode=$keyCode")
-            if (engine != null) {
-                engine.toASCIIMode()
-                return true
-            }
-        }
-
-        if (mKeyJapaneseMode?.matches(event) == true) {
-            logI("mKeyJapaneseMode matched: keyCode=$keyCode")
-            if (engine != null) {
-                engine.handleKanaKey()
                 return true
             }
         }
@@ -687,12 +665,12 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
                 return true
             }
             KeyEvent.KEYCODE_DPAD_UP -> {
-                if (engine != null && engine.handleDpadUp()) {
+                if (engine != null && engine.handleDpadUp(event.isShiftPressed)) {
                     return true
                 }
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                if (engine != null && engine.handleDpadDown()) {
+                if (engine != null && engine.handleDpadDown(event.isShiftPressed)) {
                     return true
                 }
             }
@@ -832,22 +810,22 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
         }
     }
 
-    fun handleDpadUp() {
+    fun handleDpadUp(isShifted: Boolean = false) {
         if (isInputDisabled()) {
             return
         }
         val engine = mEngine
-        if (engine == null || !engine.handleDpadUp()) {
+        if (engine == null || !engine.handleDpadUp(isShifted)) {
             sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_UP)
         }
     }
 
-    fun handleDpadDown() {
+    fun handleDpadDown(isShifted: Boolean = false) {
         if (isInputDisabled()) {
             return
         }
         val engine = mEngine
-        if (engine == null || !engine.handleDpadDown()) {
+        if (engine == null || !engine.handleDpadDown(isShifted)) {
             sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_DOWN)
         }
     }

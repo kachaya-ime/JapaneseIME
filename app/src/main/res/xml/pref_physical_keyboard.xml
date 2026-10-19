@@ -18,26 +18,6 @@
             android:title="OSの物理キーボード設定を開く" />
     </PreferenceCategory>
 
-    <PreferenceCategory
-        android:key="category_mode_keys"
-        android:title="モード切替キー割り当て"
-        app:iconSpaceReserved="false">
-
-        <Preference
-            android:key="physical_key_toggle_en_jp"
-            android:summary="物理キーを押して変更"
-            android:title="日英切り替えキー" />
-
-        <Preference
-            android:key="physical_key_japanese_mode"
-            android:summary="物理キーを押して変更"
-            android:title="日本語モード変更キー" />
-
-        <Preference
-            android:key="physical_key_english_mode"
-            android:summary="物理キーを押して変更"
-            android:title="英語モード変更キー" />
-    </PreferenceCategory>
 
     <PreferenceCategory
         android:title="ショートカットキー設定"

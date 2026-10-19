@@ -538,19 +538,19 @@ class InputView @JvmOverloads constructor(
                     resetModifiers()
                 }
                 KeyConfig.CODE_LEFT -> {
-                    mInputService?.handleDpadLeft()
+                    mInputService?.handleDpadLeft(mIsShifted)
                     resetModifiers()
                 }
                 KeyConfig.CODE_RIGHT -> {
-                    mInputService?.handleDpadRight()
+                    mInputService?.handleDpadRight(mIsShifted)
                     resetModifiers()
                 }
                 KeyConfig.CODE_UP -> {
-                    mInputService?.handleDpadUp()
+                    mInputService?.handleDpadUp(mIsShifted)
                     resetModifiers()
                 }
                 KeyConfig.CODE_DOWN -> {
-                    mInputService?.handleDpadDown()
+                    mInputService?.handleDpadDown(mIsShifted)
                     resetModifiers()
                 }
                 KeyConfig.CODE_BACKSPACE -> {

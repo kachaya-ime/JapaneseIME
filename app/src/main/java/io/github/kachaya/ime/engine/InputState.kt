@@ -18,10 +18,10 @@ interface InputState {
     fun processTab(context: InputEngine, isShifted: Boolean): Boolean
     fun processEnter(context: InputEngine): Boolean
 
-    fun processDpadUp(context: InputEngine): Boolean
-    fun processDpadDown(context: InputEngine): Boolean
-    fun processDpadLeft(context: InputEngine): Boolean
-    fun processDpadRight(context: InputEngine): Boolean
+    fun processDpadUp(context: InputEngine, isShifted: Boolean): Boolean
+    fun processDpadDown(context: InputEngine, isShifted: Boolean): Boolean
+    fun processDpadLeft(context: InputEngine, isShifted: Boolean): Boolean
+    fun processDpadRight(context: InputEngine, isShifted: Boolean): Boolean
     fun handleBackKey(context: InputEngine): Boolean
 
     fun onEnterState(context: InputEngine)
@@ -129,15 +129,15 @@ enum class InputStateComposing : InputState {
         return true
     }
 
-    override fun processDpadUp(context: InputEngine): Boolean = true
-    override fun processDpadDown(context: InputEngine): Boolean = true
+    override fun processDpadUp(context: InputEngine, isShifted: Boolean): Boolean = true
+    override fun processDpadDown(context: InputEngine, isShifted: Boolean): Boolean = true
 
-    override fun processDpadLeft(context: InputEngine): Boolean {
+    override fun processDpadLeft(context: InputEngine, isShifted: Boolean): Boolean {
         context.moveComposingCursor(-1)
         return true
     }
 
-    override fun processDpadRight(context: InputEngine): Boolean {
+    override fun processDpadRight(context: InputEngine, isShifted: Boolean): Boolean {
         context.moveComposingCursor(1)
         return true
     }
@@ -315,24 +315,24 @@ enum class InputStateConverting : InputState {
         return true
     }
 
-    override fun processDpadUp(context: InputEngine): Boolean {
+    override fun processDpadUp(context: InputEngine, isShifted: Boolean): Boolean {
         context.choosePrevCandidate()
         return true
     }
 
-    override fun processDpadDown(context: InputEngine): Boolean {
+    override fun processDpadDown(context: InputEngine, isShifted: Boolean): Boolean {
         context.chooseNextCandidate()
         return true
     }
 
-    override fun processDpadLeft(context: InputEngine): Boolean {
+    override fun processDpadLeft(context: InputEngine, isShifted: Boolean): Boolean {
         if (!context.focusPrevSegment()) {
             context.choosePrevCandidate()
         }
         return true
     }
 
-    override fun processDpadRight(context: InputEngine): Boolean {
+    override fun processDpadRight(context: InputEngine, isShifted: Boolean): Boolean {
         if (!context.focusNextSegment()) {
             context.chooseNextCandidate()
         }
@@ -458,10 +458,10 @@ enum class InputStateIdle : InputState {
     override fun processTab(context: InputEngine, isShifted: Boolean): Boolean = false
     override fun processEnter(context: InputEngine): Boolean = false
 
-    override fun processDpadUp(context: InputEngine): Boolean = !context.canMoveCursor()
-    override fun processDpadDown(context: InputEngine): Boolean = !context.canMoveCursor()
-    override fun processDpadLeft(context: InputEngine): Boolean = !context.canMoveCursor()
-    override fun processDpadRight(context: InputEngine): Boolean = !context.canMoveCursor()
+    override fun processDpadUp(context: InputEngine, isShifted: Boolean): Boolean = !context.canMoveCursor()
+    override fun processDpadDown(context: InputEngine, isShifted: Boolean): Boolean = !context.canMoveCursor()
+    override fun processDpadLeft(context: InputEngine, isShifted: Boolean): Boolean = !context.canMoveCursor()
+    override fun processDpadRight(context: InputEngine, isShifted: Boolean): Boolean = !context.canMoveCursor()
 
     override fun handleBackKey(context: InputEngine): Boolean = false
 

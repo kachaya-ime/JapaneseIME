@@ -205,7 +205,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 }
             }
         }
-        if (state.processDpadLeft(this)) {
+        if (state.processDpadLeft(this, isShifted)) {
             updateComposingText()
             return true
         }
@@ -220,23 +220,23 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 }
             }
         }
-        if (state.processDpadRight(this)) {
+        if (state.processDpadRight(this, isShifted)) {
             updateComposingText()
             return true
         }
         return false
     }
 
-    fun handleDpadUp(): Boolean {
-        if (state.processDpadUp(this)) {
+    fun handleDpadUp(isShifted: Boolean): Boolean {
+        if (state.processDpadUp(this, isShifted)) {
             updateComposingText()
             return true
         }
         return false
     }
 
-    fun handleDpadDown(): Boolean {
-        if (state.processDpadDown(this)) {
+    fun handleDpadDown(isShifted: Boolean): Boolean {
+        if (state.processDpadDown(this, isShifted)) {
             updateComposingText()
             return true
         }

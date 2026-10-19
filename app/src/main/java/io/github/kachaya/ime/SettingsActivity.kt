@@ -25,7 +25,7 @@ import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 import io.github.kachaya.ime.keyboard.KeyConfig
 import io.github.kachaya.ime.keyboard.LayoutManager
-import io.github.kachaya.ime.keyboard.PhysicalKeyBinding
+
 import io.github.kachaya.ime.zenz.ZenzEngine
 import org.json.JSONArray
 import org.json.JSONObject
@@ -167,10 +167,6 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.pref_physical_keyboard, rootKey)
 
-            setupKeyPref(PhysicalKeyBinding.KEY_TOGGLE_EN_JP, "日英切り替えキー")
-            setupKeyPref(PhysicalKeyBinding.KEY_JAPANESE_MODE, "日本語モード変更キー")
-            setupKeyPref(PhysicalKeyBinding.KEY_ENGLISH_MODE, "英語モード変更キー")
-
             val openSystemKeyboardPref = findPreference<Preference>("open_system_hard_keyboard_settings")
             openSystemKeyboardPref?.setOnPreferenceClickListener {
                 openSystemPhysicalKeyboardSettings()
@@ -202,83 +198,6 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
             if (!launched) {
                 Toast.makeText(ctx, "システム設定画面を開けませんでした", Toast.LENGTH_SHORT).show()
             }
-        }
-
-        private fun setupKeyPref(prefKey: String, title: String) {
-            setupKeyPref(prefKey, PhysicalKeyBinding.getDefaultSerialized(prefKey), title)
-        }
-
-        private fun setupKeyPref(prefKey: String, defaultSerialized: String, title: String) {
-            val pref = findPreference<Preference>(prefKey) ?: return
-            val ctx = requireContext()
-            val binding = PhysicalKeyBinding.load(ctx, prefKey)
-            pref.summary = binding.getDisplayLabel()
-
-            pref.setOnPreferenceClickListener {
-                showKeyCaptureDialog(pref, prefKey, defaultSerialized, title)
-                true
-            }
-        }
-
-        private fun showKeyCaptureDialog(pref: Preference, prefKey: String, defaultSerialized: String, title: String) {
-            val ctx = requireContext()
-            val currentBinding = PhysicalKeyBinding.load(ctx, prefKey)
-            val capturedBinding = arrayOf(currentBinding)
-
-            val dialogView = LayoutInflater.from(ctx).inflate(R.layout.dialog_key_capture, null)
-            val keyLabelText = dialogView.findViewById<TextView>(R.id.text_captured_key)
-            val buttonClear = dialogView.findViewById<Button>(R.id.button_clear)
-            val buttonResetDefault = dialogView.findViewById<Button>(R.id.button_reset_default)
-
-            keyLabelText.text = currentBinding.getDisplayLabel()
-
-            val dialog = AlertDialog.Builder(ctx)
-                .setTitle(title)
-                .setView(dialogView)
-                .setPositiveButton("保存") { _, _ ->
-                    PhysicalKeyBinding.save(ctx, prefKey, capturedBinding[0])
-                    pref.summary = capturedBinding[0].getDisplayLabel()
-                }
-                .setNegativeButton("キャンセル", null)
-                .create()
-
-            buttonClear.setOnClickListener {
-                val emptyBinding = PhysicalKeyBinding(0)
-                capturedBinding[0] = emptyBinding
-                keyLabelText.text = emptyBinding.getDisplayLabel()
-            }
-
-            buttonResetDefault.setOnClickListener {
-                val defaultBinding = PhysicalKeyBinding.deserialize(defaultSerialized)
-                capturedBinding[0] = defaultBinding
-                keyLabelText.text = defaultBinding.getDisplayLabel()
-            }
-
-            dialog.setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_DOWN) {
-                    if (keyCode == KeyEvent.KEYCODE_BACK && event.repeatCount == 0) {
-                        dialog.dismiss()
-                        return@setOnKeyListener true
-                    }
-
-                    if (keyCode == KeyEvent.KEYCODE_FUNCTION || keyCode == 119
-                        || keyCode == KeyEvent.KEYCODE_SHIFT_LEFT || keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT
-                        || keyCode == KeyEvent.KEYCODE_CTRL_LEFT || keyCode == KeyEvent.KEYCODE_CTRL_RIGHT
-                        || keyCode == KeyEvent.KEYCODE_ALT_LEFT || keyCode == KeyEvent.KEYCODE_ALT_RIGHT
-                    ) {
-                        return@setOnKeyListener true
-                    }
-
-                    val meta = PhysicalKeyBinding.getNormalizedMetaState(event)
-                    val binding = PhysicalKeyBinding(keyCode, meta)
-                    capturedBinding[0] = binding
-                    keyLabelText.text = binding.getDisplayLabel()
-                    return@setOnKeyListener true
-                }
-                false
-            }
-
-            dialog.show()
         }
     }
 
