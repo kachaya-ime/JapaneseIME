@@ -327,10 +327,10 @@ class LearningDictionary(context: Context?) {
     }
 
     class Record(
-        @JvmField val key: String,
-        @JvmField val surface: String,
-        @JvmField val posId: Int,
-        @JvmField val cost: Int
+        val key: String,
+        val surface: String,
+        val posId: Int,
+        val cost: Int
     )
 
     fun getAllRecords(): List<Record> {
@@ -358,12 +358,12 @@ class LearningDictionary(context: Context?) {
     }
 
     class LearningDictEntry(
-        @JvmField val surface: String,
-        @JvmField val posId: Int,
-        @JvmField val cost: Int
+        val surface: String,
+        val posId: Int,
+        val cost: Int
     )
 
     open class Entry(
-        @JvmField var entries: MutableList<LearningDictEntry>?
+        var entries: MutableList<LearningDictEntry>?
     )
 }

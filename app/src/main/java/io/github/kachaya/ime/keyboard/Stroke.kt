@@ -19,13 +19,10 @@ class Stroke(private val dictionary: List<DictionaryEntry>) {
         const val DIRECTION_COUNT = 16
         const val DEFAULT_SAMPLING_COUNT = 32
 
-        @JvmField
         val ALPHABET_DIC: MutableList<DictionaryEntry> = ArrayList()
 
-        @JvmField
         val NUMERIC_DIC: MutableList<DictionaryEntry> = ArrayList()
 
-        @JvmField
         val PUNCTUATION_DIC: MutableList<DictionaryEntry> = ArrayList()
 
         private class RawEntry(
@@ -174,22 +171,21 @@ class Stroke(private val dictionary: List<DictionaryEntry>) {
     }
 
     class DictionaryEntry(
-        @JvmField val code: Int,
-        @JvmField val fv: FeatureVector
+        val code: Int,
+        val fv: FeatureVector
     )
 
     class FeatureVector {
-        @JvmField var dir: IntArray = intArrayOf()
-        @JvmField var normalizedLength: Double = 0.0
-        @JvmField var startDir: Int = 0
-        @JvmField var endDir: Int = 0
-        @JvmField var startEndDist: Double = 0.0
-        @JvmField var travelX: Double = 0.0
-        @JvmField var travelY: Double = 0.0
+        var dir: IntArray = intArrayOf()
+        var normalizedLength: Double = 0.0
+        var startDir: Int = 0
+        var endDir: Int = 0
+        var startEndDist: Double = 0.0
+        var travelX: Double = 0.0
+        var travelY: Double = 0.0
     }
 
     object Preprocessor {
-        @JvmStatic
         fun normalize(pts: List<PointF>): List<PointF> {
             var minX = Float.MAX_VALUE
             var minY = Float.MAX_VALUE
@@ -224,7 +220,6 @@ class Stroke(private val dictionary: List<DictionaryEntry>) {
     }
 
     object FeatureExtractor {
-        @JvmStatic
         fun extract(pts: List<PointF>): FeatureVector {
             val fv = FeatureVector()
             val n = pts.size - 1
@@ -254,7 +249,6 @@ class Stroke(private val dictionary: List<DictionaryEntry>) {
     }
 
     object PathSampler {
-        @JvmStatic
         fun sample(path: Path): List<PointF> {
             val pts = ArrayList<PointF>()
             val pm = PathMeasure(path, false)

@@ -750,7 +750,6 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
         mEngine?.processKey(code)
     }
 
-    @JvmOverloads
     fun handleSpace(isShifted: Boolean = false) {
         if (isInputDisabled()) {
             return
@@ -853,7 +852,6 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
         }
     }
 
-    @JvmOverloads
     fun handleDpadLeft(isShifted: Boolean = false) {
         if (isInputDisabled()) {
             return
@@ -864,7 +862,6 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
         }
     }
 
-    @JvmOverloads
     fun handleDpadRight(isShifted: Boolean = false) {
         if (isInputDisabled()) {
             return
@@ -1180,7 +1177,6 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
     }
 
     companion object {
-        @JvmStatic
         fun setupDefaultPreferences(context: Context) {
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
 
@@ -1197,7 +1193,6 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
             PreferenceManager.setDefaultValues(context, R.xml.pref_backup_reset, false)
         }
 
-        @JvmStatic
         fun getThemedContext(context: Context): Context {
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
             val themeMode = prefs.getString(PrefKeys.KEYBOARD_THEME, "auto")

@@ -57,7 +57,6 @@ class DictDataFetcher(
          * 指定されたURLからファイルをダウンロードします（HTTPリダイレクト対応）。
          */
         @Throws(IOException::class)
-        @JvmStatic
         fun downloadFile(urlString: String, outputPath: Path) {
             println("Downloading $urlString to ${outputPath.toAbsolutePath()}")
             val parent = outputPath.parent
@@ -103,7 +102,6 @@ class DictDataFetcher(
          * .tar.gz アーカイブを指定ディレクトリに展開します。
          */
         @Throws(IOException::class)
-        @JvmStatic
         fun extractTarGz(tarGzPath: Path, outputDir: Path) {
             println("Extracting ${tarGzPath.toAbsolutePath()} to ${outputDir.toAbsolutePath()}")
             Files.createDirectories(outputDir)

@@ -8,9 +8,9 @@ import androidx.preference.PreferenceManager
 /**
  * 日本語物理キーボード固有のモード切替キー（半角/全角、Fn+Q、英数、かな等）の割り当てを管理するクラスです。
  */
-class PhysicalKeyBinding @JvmOverloads constructor(
-    @JvmField val keyCode: Int,
-    @JvmField val metaState: Int = 0
+class PhysicalKeyBinding constructor(
+    val keyCode: Int,
+    val metaState: Int = 0
 ) {
 
     /**
@@ -77,7 +77,6 @@ class PhysicalKeyBinding @JvmOverloads constructor(
         /**
          * KeyEvent からサポートされている修飾キーの状態を抽出し、標準化されたメタフラグを返します。
          */
-        @JvmStatic
         fun getNormalizedMetaState(event: KeyEvent): Int {
             var meta = 0
             if (event.isFunctionPressed || (event.metaState and KeyEvent.META_FUNCTION_ON) != 0) {
@@ -98,7 +97,6 @@ class PhysicalKeyBinding @JvmOverloads constructor(
         /**
          * シリアライズ文字列から PhysicalKeyBinding を復元します。
          */
-        @JvmStatic
         fun deserialize(str: String?): PhysicalKeyBinding {
             if (str.isNullOrBlank()) {
                 return PhysicalKeyBinding(0)
@@ -116,7 +114,6 @@ class PhysicalKeyBinding @JvmOverloads constructor(
         /**
          * 設定キーに応じたデフォルトのシリアライズ文字列を取得します。
          */
-        @JvmStatic
         fun getDefaultSerialized(prefKey: String?): String {
             if (KEY_TOGGLE_EN_JP == prefKey) {
                 return "${KeyEvent.KEYCODE_SPACE}:${KeyEvent.META_CTRL_ON}"
@@ -124,30 +121,25 @@ class PhysicalKeyBinding @JvmOverloads constructor(
             return "0"
         }
 
-        @JvmStatic
         fun load(prefs: SharedPreferences, prefKey: String): PhysicalKeyBinding {
             return load(prefs, prefKey, getDefaultSerialized(prefKey))
         }
 
-        @JvmStatic
         fun load(context: Context, prefKey: String): PhysicalKeyBinding {
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
             return load(prefs, prefKey)
         }
 
-        @JvmStatic
         fun load(prefs: SharedPreferences, prefKey: String, defaultSerializedValue: String): PhysicalKeyBinding {
             val valStr = prefs.getString(prefKey, defaultSerializedValue)
             return deserialize(valStr)
         }
 
-        @JvmStatic
         fun load(context: Context, prefKey: String, defaultSerializedValue: String): PhysicalKeyBinding {
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
             return load(prefs, prefKey, defaultSerializedValue)
         }
 
-        @JvmStatic
         fun save(context: Context, prefKey: String, binding: PhysicalKeyBinding) {
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
             prefs.edit().putString(prefKey, binding.serialize()).apply()
@@ -156,7 +148,6 @@ class PhysicalKeyBinding @JvmOverloads constructor(
         /**
          * 日本語キーボード固有キーまたは単一キーの表示用ラベルを取得します。
          */
-        @JvmStatic
         fun getSingleKeyLabel(keyCode: Int): String {
             return when (keyCode) {
                 KeyEvent.KEYCODE_ZENKAKU_HANKAKU -> "半角/全角"

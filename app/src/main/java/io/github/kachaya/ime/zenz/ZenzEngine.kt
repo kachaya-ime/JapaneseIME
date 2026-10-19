@@ -56,17 +56,7 @@ class ZenzEngine(private val mContext: Context?) {
     private external fun nativeTokenToPiece(token: Int): ByteArray?
     private external fun nativeGetEosToken(): Int
 
-    /**
-     * 読みと表記の対応関係（アライメント）データモデルクラスです。
-     */
-    class AlignmentPair(
-        @JvmField val reading: String,
-        @JvmField val surface: String
-    ) {
-        override fun toString(): String {
-            return "$reading|$surface"
-        }
-    }
+
 
     /**
      * 変換結果を受け取るための非同期コールバックインターフェースです。
@@ -476,10 +466,7 @@ class ZenzEngine(private val mContext: Context?) {
                     continue
                 }
 
-                val alignments = alignReadingAndSurface(reading, surfaceResult)
-
                 Log.i(TAG, "[ZENZ RECV RAW BRANCH $branch]: " + formatVisibleText(rawText) + " => [SURFACE]: " + surfaceResult)
-                Log.i(TAG, "[ZENZ ALIGNMENT BRANCH $branch]: $alignments")
 
                 if (addedSurfaces.add(surfaceResult)) {
                     val zenzCandidate = Candidate(reading, surfaceResult, "Zenz AI")
@@ -568,112 +555,9 @@ class ZenzEngine(private val mContext: Context?) {
             }
         }
 
-        @JvmStatic
-        fun isKanjiBlock(str: String?): Boolean {
-            if (str.isNullEmpty()) {
-                return false
-            }
-            val codePoint = str!!.codePointAt(0)
-            return Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN ||
-                    (codePoint in 0x4E00..0x9FFF) ||
-                    (codePoint in 0x3400..0x4DBF) ||
-                    codePoint == 0x3005
-        }
 
-        @JvmStatic
-        fun segmentSurface(surface: String?): List<String> {
-            val segments = ArrayList<String>()
-            if (surface.isNullEmpty()) {
-                return segments
-            }
 
-            val sb = StringBuilder()
-            var currentIsKanji = isKanjiBlock(surface!![0].toString())
 
-            for (i in surface.indices) {
-                val c = surface[i]
-                val isK = isKanjiBlock(c.toString())
-                if (isK == currentIsKanji) {
-                    sb.append(c)
-                } else {
-                    if (sb.isNotEmpty()) {
-                        segments.add(sb.toString())
-                        sb.setLength(0)
-                    }
-                    sb.append(c)
-                    currentIsKanji = isK
-                }
-            }
-            if (sb.isNotEmpty()) {
-                segments.add(sb.toString())
-            }
-            return segments
-        }
-
-        @JvmStatic
-        fun alignReadingAndSurface(reading: String?, surface: String?): List<AlignmentPair> {
-            val alignments = ArrayList<AlignmentPair>()
-            if (reading.isNullEmpty() || surface.isNullEmpty()) {
-                return alignments
-            }
-
-            val normReading = RomajiConverter.toWideKatakana(reading)
-            val segments = segmentSurface(surface)
-
-            var readingIdx = 0
-            val nReading = normReading.length
-
-            for (i in segments.indices) {
-                val seg = segments[i]
-                val isKanji = isKanjiBlock(seg)
-
-                if (!isKanji) {
-                    val normSeg = RomajiConverter.toWideKatakana(seg)
-                    val matchPos = normReading.indexOf(normSeg, readingIdx)
-
-                    if (matchPos == readingIdx) {
-                        val origReading = reading!!.substring(readingIdx, Math.min(reading.length, readingIdx + seg.length))
-                        alignments.add(AlignmentPair(origReading, seg))
-                        readingIdx += normSeg.length
-                    } else if (matchPos != -1 && matchPos - readingIdx < 8) {
-                        val matchedReading = reading!!.substring(readingIdx, Math.min(reading.length, matchPos))
-                        alignments.add(AlignmentPair(matchedReading, seg))
-                        readingIdx = matchPos + normSeg.length
-                    } else {
-                        alignments.add(AlignmentPair(seg, seg))
-                    }
-                } else {
-                    var nextAnchor: String? = null
-                    if (i + 1 < segments.size) {
-                        nextAnchor = RomajiConverter.toWideKatakana(segments[i + 1])
-                    }
-
-                    var endIdx = nReading
-                    if (!nextAnchor.isNullEmpty()) {
-                        val anchorPos = normReading.indexOf(nextAnchor!!, readingIdx + 1)
-                        if (anchorPos != -1) {
-                            endIdx = anchorPos
-                        }
-                    }
-
-                    if (readingIdx < endIdx) {
-                        val matchedReading = reading!!.substring(readingIdx, Math.min(reading.length, endIdx))
-                        alignments.add(AlignmentPair(matchedReading, seg))
-                        readingIdx = endIdx
-                    } else {
-                        alignments.add(AlignmentPair("", seg))
-                    }
-                }
-            }
-
-            if (readingIdx < reading!!.length && alignments.isNotEmpty()) {
-                val last = alignments[alignments.size - 1]
-                val extraReading = reading.substring(readingIdx)
-                alignments[alignments.size - 1] = AlignmentPair(last.reading + extraReading, last.surface)
-            }
-
-            return alignments
-        }
 
         @JvmStatic
         fun prepareModelFileFromAssets(context: Context?, assetFileName: String?): String? {

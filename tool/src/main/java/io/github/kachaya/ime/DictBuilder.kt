@@ -31,7 +31,7 @@ import java.util.zip.ZipOutputStream
  * data ディレクトリにある CSV データを読み込んでフィルタリング・ソートを行い、
  * 同じ読み（reading）ごとにまとめた上でバイナリ形式で SQLite データベース（system_dict）に保存するツールクラスです。
  */
-class DictBuilder @JvmOverloads constructor(
+class DictBuilder constructor(
     private val workPath: Path = Paths.get("work"),
     private val dataPath: Path = workPath.resolve("mecab-ipadic")
 ) {
@@ -469,7 +469,6 @@ class DictBuilder @JvmOverloads constructor(
             "Postp-col.csv", "Postp.csv", "Prefix.csv", "Suffix.csv", "Symbol.csv", "Verb.csv"
         )
 
-        @JvmStatic
         fun main(args: Array<String>) {
             try {
                 val builder = DictBuilder()
@@ -481,7 +480,6 @@ class DictBuilder @JvmOverloads constructor(
         }
 
         @Throws(IOException::class)
-        @JvmStatic
         fun convertLeftIdDefToBinary(inputDefPath: Path, outputPath: Path) {
             println("Converting left-id.def (EUC-JP) to binary pos_id.bin: ${inputDefPath.toAbsolutePath()}")
             if (!Files.exists(inputDefPath)) {
@@ -530,7 +528,6 @@ class DictBuilder @JvmOverloads constructor(
         }
 
         @Throws(IOException::class)
-        @JvmStatic
         fun convertMatrixDefToBigEndianBin(inputDefPath: Path, outputPath: Path) {
             println("Converting matrix.def to Big Endian matrix.bin: ${inputDefPath.toAbsolutePath()}")
             if (!Files.exists(inputDefPath)) {
@@ -591,7 +588,6 @@ class DictBuilder @JvmOverloads constructor(
         }
 
         @Throws(IOException::class)
-        @JvmStatic
         fun convertEmoji(inputPath: Path, outputTxtPath: Path) {
             println("Converting emoji data to: ${outputTxtPath.toAbsolutePath()}")
             val groupMap = LinkedHashMap<String, MutableList<String>>()
@@ -736,7 +732,6 @@ class DictBuilder @JvmOverloads constructor(
         }
 
         @Throws(IOException::class)
-        @JvmStatic
         fun dumpDbToTsv(dbPath: Path, outputTsvPath: Path) {
             val dbFile = if (dbPath.fileName.toString().endsWith(".db")) dbPath else dbPath.resolveSibling("${dbPath.fileName}.db")
             if (!Files.exists(dbFile)) {
@@ -784,7 +779,6 @@ class DictBuilder @JvmOverloads constructor(
             }
         }
 
-        @JvmStatic
         fun toHiragana(s: String?): String? {
             if (s == null) return null
             val sb = StringBuilder()
@@ -798,7 +792,6 @@ class DictBuilder @JvmOverloads constructor(
             return sb.toString()
         }
 
-        @JvmStatic
         fun getScriptRank(s: String?): Int {
             if (s == null) return 0
             return if (isValidReading(s)) {
@@ -810,35 +803,29 @@ class DictBuilder @JvmOverloads constructor(
             }
         }
 
-        @JvmStatic
         fun isKatakanaOnly(s: String?): Boolean {
             return s != null && s.matches("^[\\p{IsKatakana}ー]+$".toRegex())
         }
 
-        @JvmStatic
         fun hasKatakana(s: String?): Boolean {
             return s != null && s.matches(".*[\\p{IsKatakana}ー].*".toRegex())
         }
 
-        @JvmStatic
         fun isValidBase(s: String?): Boolean {
             if (s == null) return false
             if (s.matches(".*[0-9A-Za-z:].*".toRegex())) return false
             return true
         }
 
-        @JvmStatic
         fun isValidReading(s: String?): Boolean {
             return s != null && s.matches("^[ぁ-ゖー]+$".toRegex())
         }
 
-        @JvmStatic
         fun isValidSurface(s: String?): Boolean {
             return s != null && s.matches("^[\\p{IsHan}\\p{IsKatakana}\\p{IsHiragana}ー〆々\\p{So}]+$".toRegex())
         }
 
         @Throws(IOException::class)
-        @JvmStatic
         fun serialize(entries: List<Entry>): ByteArray {
             val baos = ByteArrayOutputStream()
             DataOutputStream(baos).use { dos ->
@@ -853,7 +840,6 @@ class DictBuilder @JvmOverloads constructor(
         }
 
         @Throws(IOException::class)
-        @JvmStatic
         fun deserialize(data: ByteArray?): List<Entry> {
             val entries = ArrayList<Entry>()
             if (data == null) return entries
@@ -873,10 +859,10 @@ class DictBuilder @JvmOverloads constructor(
     }
 
     class PosStats {
-        @JvmField var min: Int = Int.MAX_VALUE
-        @JvmField var max: Int = Int.MIN_VALUE
-        @JvmField var sum: Long = 0
-        @JvmField var count: Int = 0
+        var min: Int = Int.MAX_VALUE
+        var max: Int = Int.MIN_VALUE
+        var sum: Long = 0
+        var count: Int = 0
 
         fun add(cost: Int) {
             if (cost < min) min = cost
@@ -887,8 +873,8 @@ class DictBuilder @JvmOverloads constructor(
     }
 
     class ReadingPosKey(
-        @JvmField val reading: String,
-        @JvmField val leftId: Int
+        val reading: String,
+        val leftId: Int
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -902,22 +888,22 @@ class DictBuilder @JvmOverloads constructor(
     }
 
     class DictEntry(
-        @JvmField val surface: String,
-        @JvmField val leftId: Int,
-        @JvmField val rightId: Int,
-        @JvmField val cost: Int,
-        @JvmField val pos: String,
-        @JvmField val pos1: String,
-        @JvmField val pos2: String,
-        @JvmField val pos3: String,
-        @JvmField val ctype: String,
-        @JvmField val cform: String,
-        @JvmField val base: String,
-        @JvmField val reading: String,
-        @JvmField val rawReading: String,
-        @JvmField val fileName: String,
-        @JvmField val originalLine: String,
-        @JvmField val lineNumber: Long
+        val surface: String,
+        val leftId: Int,
+        val rightId: Int,
+        val cost: Int,
+        val pos: String,
+        val pos1: String,
+        val pos2: String,
+        val pos3: String,
+        val ctype: String,
+        val cform: String,
+        val base: String,
+        val reading: String,
+        val rawReading: String,
+        val fileName: String,
+        val originalLine: String,
+        val lineNumber: Long
     ) {
         fun withCost(newCost: Int): DictEntry {
             return DictEntry(
@@ -933,7 +919,6 @@ class DictBuilder @JvmOverloads constructor(
         }
 
         companion object {
-            @JvmStatic
             fun fromCsvLine(csvLine: String?, fileName: String, lineNumber: Long): DictEntry? {
                 if (csvLine.isNullOrBlank()) {
                     return null
@@ -982,8 +967,8 @@ class DictBuilder @JvmOverloads constructor(
     }
 
     class Entry(
-        @JvmField val surface: String,
-        @JvmField val posId: Int,
-        @JvmField val cost: Int
+        val surface: String,
+        val posId: Int,
+        val cost: Int
     )
 }

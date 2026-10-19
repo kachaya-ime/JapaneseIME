@@ -11,7 +11,7 @@ import java.util.Collections
 /**
  * ViterbiアルゴリズムとN-best探索を用いて、読み（かな文字列）から最適な文節・文の変換候補を生成するデコーダークラスです。
  */
-class ViterbiDecoder @JvmOverloads constructor(
+class ViterbiDecoder constructor(
     private val mDictionary: Dictionary?,
     private val mNBest: Int,
     maxWordLength: Int = DEFAULT_MAX_WORD_LENGTH,
@@ -26,21 +26,19 @@ class ViterbiDecoder @JvmOverloads constructor(
      * Viterbi探索のラティス（格子）上のノードおよびパスの途中の状態を保持するクラスです。
      */
     class PathNode(
-        @JvmField val reading: String?,
-        @JvmField val surface: String?,
-        @JvmField val posId: Int,
-        @JvmField val cost: Int,
+        val reading: String?,
+        val surface: String?,
+        val posId: Int,
+        val cost: Int,
         type: Candidate.Type?,
-        @JvmField val prev: PathNode?,
-        @JvmField val totalCost: Int
+        val prev: PathNode?,
+        val totalCost: Int
     ) {
-        @JvmField
         val type: Candidate.Type = type ?: Candidate.Type.SYSTEM
 
         fun isLearningWord(): Boolean = type == Candidate.Type.LEARNING
     }
 
-    @JvmField
     val maxWordLength: Int = if (maxWordLength > 0) maxWordLength else DEFAULT_MAX_WORD_LENGTH
 
     private val mContext: Context? = context ?: mDictionary?.getContext()

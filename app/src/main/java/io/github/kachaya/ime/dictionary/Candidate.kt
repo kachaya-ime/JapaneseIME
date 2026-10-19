@@ -9,9 +9,9 @@ import io.github.kachaya.ime.engine.ViterbiDecoder
 /**
  * 変換候補1つを表現するデータモデルクラスです。
  */
-class Candidate @JvmOverloads constructor(
-    @JvmField var rawCandidate: String?,
-    @JvmField var candidate: String?,
+class Candidate constructor(
+    var rawCandidate: String?,
+    var candidate: String?,
     zenzAi: String? = null
 ) {
     /** 候補の種類や由来を表す列挙型。 */
@@ -24,19 +24,15 @@ class Candidate @JvmOverloads constructor(
     }
 
     /** 候補の種類・由来。 */
-    @JvmField
     var type: Type = Type.SYSTEM
 
     /** 辞書エントリ情報（品詞ID、コストなど）。 */
-    @JvmField
     var entry: WordEntry? = null
 
     /** Viterbi解析結果のパス（PathNodeチェーンの終端ノード）。 */
-    @JvmField
     var viterbiPathNode: ViterbiDecoder.PathNode? = null
 
     /** 注釈（アノテーション）情報。 */
-    @JvmField
     var annotation: String? = null
 
     /**
@@ -157,5 +153,30 @@ class Candidate @JvmOverloads constructor(
         ssb.setSpan(RelativeSizeSpan(0.45f), start, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         ssb.setSpan(ForegroundColorSpan(0xFF888888.toInt()), start, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         return ssb
+    }
+}
+
+/**
+ * 辞書内の単語エントリ（読み、表層形、品詞ID、コスト、学習フラグ等）を保持するデータクラスです。
+ */
+class WordEntry(
+    val reading: String,
+    val surface: String,
+    val posId: Int,
+    val cost: Int
+) {
+    var type: Candidate.Type = Candidate.Type.SYSTEM
+
+    /**
+     * この単語が学習単語であるかどうかを判定します。
+     *
+     * @return 学習単語の場合は true
+     */
+    fun isLearningWord(): Boolean {
+        return type == Candidate.Type.LEARNING
+    }
+
+    override fun toString(): String {
+        return "$reading $surface"
     }
 }

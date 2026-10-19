@@ -21,7 +21,6 @@ object LayoutManager {
     const val PREF_LAYOUT_UPDATED = "layout_updated_at"
 
     /** パレット用：特殊キー (QWERTY等) */
-    @JvmField
     val PALETTE_SPECIAL_KEYS: List<KeyConfig> = listOf(
         KeyConfig(KeyConfig.CODE_SPACE),
         KeyConfig(KeyConfig.CODE_ENTER),
@@ -41,7 +40,6 @@ object LayoutManager {
     )
 
     /** パレット用：Tablet特殊キー（Symキーを除外） */
-    @JvmField
     val PALETTE_SPECIAL_KEYS_TABLET: List<KeyConfig> = listOf(
         KeyConfig(KeyConfig.CODE_SPACE),
         KeyConfig(KeyConfig.CODE_ENTER),
@@ -58,18 +56,14 @@ object LayoutManager {
     )
 
     /** パレット用：英数字 */
-    @JvmField
     val PALETTE_ALPHA_KEYS: List<KeyConfig> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".map { KeyConfig(it.toString()) }
 
     /** パレット用：記号（QWERTYカスタマイズ用） */
-    @JvmField
     val PALETTE_SYMBOL_KEYS: List<KeyConfig> = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~¥".map { KeyConfig(it.toString()) } + KeyConfig(KeyConfig.CODE_ESC)
 
     /** パレット用：記号バー専用 */
-    @JvmField
     val PALETTE_SYMBOL_BAR_KEYS: List<KeyConfig> = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~¥".map { KeyConfig(it.toString()) } + KeyConfig(KeyConfig.CODE_ESC)
 
-    @JvmStatic
     fun loadLayout(context: Context, key: String, defaultValue: String): String {
         val file = getLayoutFile(context, key)
         if (file.exists()) {
@@ -89,7 +83,6 @@ object LayoutManager {
         return defaultValue
     }
 
-    @JvmStatic
     fun saveLayout(context: Context, key: String, layoutJson: String) {
         val file = getLayoutFile(context, key)
         val dir = file.parentFile
@@ -106,7 +99,6 @@ object LayoutManager {
         }
     }
 
-    @JvmStatic
     fun getManagedKeys(): List<String> {
         return listOf(
             "custom_qwerty_layout_normal",
@@ -118,7 +110,6 @@ object LayoutManager {
         )
     }
 
-    @JvmStatic
     fun getSpecialKeysPalette(targetPrefKey: String?): List<KeyConfig> {
         if ("custom_tablet_layout" == targetPrefKey) {
             return PALETTE_SPECIAL_KEYS_TABLET
@@ -126,22 +117,18 @@ object LayoutManager {
         return PALETTE_SPECIAL_KEYS
     }
 
-    @JvmStatic
     fun getAlphaKeysPalette(): List<KeyConfig> {
         return PALETTE_ALPHA_KEYS
     }
 
-    @JvmStatic
     fun getSymbolKeysPalette(targetPrefKey: String?): List<KeyConfig> {
         return if ("combined_symbols" == targetPrefKey) PALETTE_SYMBOL_BAR_KEYS else PALETTE_SYMBOL_KEYS
     }
 
-    @JvmStatic
     fun isSymbolBar(targetPrefKey: String?): Boolean {
         return "combined_symbols" == targetPrefKey
     }
 
-    @JvmStatic
     fun hasSymbolMode(targetPrefKey: String?): Boolean {
         return "custom_qwerty_layout" == targetPrefKey
     }
@@ -151,7 +138,6 @@ object LayoutManager {
         return File(dir, "$key.json")
     }
 
-    @JvmStatic
     fun clearLayout(context: Context, targetPrefKey: String?) {
         if ("combined_symbols" == targetPrefKey) {
             val file = getLayoutFile(context, "custom_symbols_layout")
@@ -169,7 +155,6 @@ object LayoutManager {
         }
     }
 
-    @JvmStatic
     fun clearLayouts(context: Context) {
         val dir = File(context.filesDir, LAYOUT_DIR)
         if (dir.exists() && dir.isDirectory) {
@@ -185,7 +170,6 @@ object LayoutManager {
     }
 
     object DefaultLayouts {
-        @JvmStatic
         fun get(context: Context?, key: String?): String? {
             return when (key) {
                 "custom_qwerty_layout_normal" -> AssetLoader.loadAssetString(context, "layouts/qwerty_normal.json")

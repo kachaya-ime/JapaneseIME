@@ -20,7 +20,6 @@ object KeyViewFactory {
      * @param config  キーの構成情報
      * @return スタイルが適用された Button インスタンス
      */
-    @JvmStatic
     fun createKeyButton(context: Context, config: KeyConfig): Button {
         val themedContext = InputService.getThemedContext(context)
         val isFunctional = config.code != KeyConfig.CODE_NONE
@@ -43,7 +42,6 @@ object KeyViewFactory {
      * @param b 対象の Button
      * @param config 設定するキーの構成情報
      */
-    @JvmStatic
     fun updateKeyButton(b: Button?, config: KeyConfig?) {
         if (b == null) return
         if (config == null) {
@@ -70,7 +68,6 @@ object KeyViewFactory {
      * @param b 対象の Button
      * @param label 設定するラベル文字列
      */
-    @JvmStatic
     fun updateKeyLabel(b: Button?, label: String?) {
         if (b == null) return
         b.text = label

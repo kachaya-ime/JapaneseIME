@@ -12,9 +12,9 @@ object RomajiConverter {
      * 単一のローマ字変換ルールを保持するデータクラスです。
      */
     class Rule(
-        @JvmField val key: String,
-        @JvmField val value: String,
-        @JvmField val next: String?
+        val key: String,
+        val value: String,
+        val next: String?
     )
 
     private val RULES_MAP = HashMap<String, Rule>()
@@ -160,7 +160,6 @@ object RomajiConverter {
     }
 
     @Synchronized
-    @JvmStatic
     fun setSeparator(key: String, value: String) {
         addRule(key, value, null)
     }
@@ -168,7 +167,6 @@ object RomajiConverter {
     /**
      * 与えられた文字がアルファベット (A-Z, a-z) かどうかを判定します。
      */
-    @JvmStatic
     fun isAlphabet(code: Int): Boolean {
         return (code in 'A'.code..'Z'.code) || (code in 'a'.code..'z'.code)
     }
@@ -176,7 +174,6 @@ object RomajiConverter {
     /**
      * 半角文字（ASCII）を対応する全角文字に変換します。
      */
-    @JvmStatic
     fun toWideLatin(code: Int): Int {
         if (code == 0x20) {
             return 0x3000
@@ -193,7 +190,6 @@ object RomajiConverter {
     /**
      * 文字列内のすべての半角 ASCII 文字を全角に変換します。
      */
-    @JvmStatic
     fun toWideLatin(str: CharSequence?): CharSequence? {
         if (str == null) {
             return null
@@ -210,7 +206,6 @@ object RomajiConverter {
     /**
      * ひらがなを対応する全角カタカナに変換します。
      */
-    @JvmStatic
     fun toWideKatakana(ch: Char): Char {
         if (ch in 'ぁ'..'ゖ') {
             return (ch.code - 'ぁ'.code + 'ァ'.code).toChar()
@@ -221,7 +216,6 @@ object RomajiConverter {
     /**
      * 文字列内のすべてのひらがなをカタカナに変換します。
      */
-    @JvmStatic
     fun toWideKatakana(cs: CharSequence?): String {
         if (cs == null) return ""
         val sb = StringBuilder()
@@ -234,7 +228,6 @@ object RomajiConverter {
     /**
      * 文字列内のすべての全角ひらがな・カタカナを半角カタカナに変換します。
      */
-    @JvmStatic
     fun toHalfKatakana(cs: CharSequence?): String {
         if (cs == null) return ""
         val sb = StringBuilder()
@@ -250,14 +243,13 @@ object RomajiConverter {
      * ローマ字変換結果を格納する保持用データクラスです。
      */
     class ConversionResult(
-        @JvmField val convertedText: String,
-        @JvmField val pendingRomaji: String
+        val convertedText: String,
+        val pendingRomaji: String
     )
 
     /**
      * ローマ字文字列を入力として受け取り、最長一致アルゴリズムで「かな文字列」と残りの「未確定ローマ字（pending）」に変換します。
      */
-    @JvmStatic
     fun convert(input: CharSequence?): ConversionResult {
         if (input == null || input.length == 0) {
             return ConversionResult("", "")
@@ -308,7 +300,6 @@ object RomajiConverter {
     /**
      * 残っている未確定ローマ字を強制的に可能な限り変換して文字列を構築します。
      */
-    @JvmStatic
     fun flushRomaji(pending: CharSequence?): String {
         if (pending == null || pending.length == 0) {
             return ""

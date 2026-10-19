@@ -26,16 +26,15 @@ abstract class KeyboardView @JvmOverloads constructor(
      * キーボードの修飾キー（Shift, Ctrl 等）の状態を保持するデータクラスです。
      */
     class KeyboardState(
-        @JvmField val shifted: Boolean,
-        @JvmField val shiftLocked: Boolean,
-        @JvmField val control: Boolean,
-        @JvmField val symbol: Boolean,
-        @JvmField val symbolLocked: Boolean,
-        @JvmField val modeText: String?,
-        @JvmField val modeIconResId: Int
+        val shifted: Boolean,
+        val shiftLocked: Boolean,
+        val control: Boolean,
+        val symbol: Boolean,
+        val symbolLocked: Boolean,
+        val modeText: String?,
+        val modeIconResId: Int
     )
 
-    @JvmField
     var mListener: OnKeyActionListener? = null
 
     protected var mHapticEnabled: Boolean = false

@@ -8,10 +8,10 @@ import org.json.JSONObject
  * 1つのキーの定義（ラベルとウェイト）を保持するクラスです。
  * 通常・シフト・記号などの各レイアウトは、このオブジェクトの独立したリストとして構成されます。
  */
-class KeyConfig @JvmOverloads constructor(
-    @JvmField var label: String,
-    @JvmField var weight: Float = 1.0f,
-    @JvmField var code: Int = CODE_NONE
+class KeyConfig constructor(
+    var label: String,
+    var weight: Float = 1.0f,
+    var code: Int = CODE_NONE
 ) {
     /** 機能キーのコンストラクタ */
     constructor(code: Int, weight: Float = 1.0f) : this(getDefaultLabel(code), weight, code)
@@ -107,14 +107,12 @@ class KeyConfig @JvmOverloads constructor(
         }
 
         /** ファイル保存用の識別名に変換します */
-        @JvmStatic
         fun codeToString(code: Int): String? {
             val entry = CODE_TO_ENTRY_MAP[code]
             return entry?.name
         }
 
         /** 識別名からコードに変換します（大文字小文字を区別しません） */
-        @JvmStatic
         fun stringToCode(s: String?): Int {
             if (s.isNullOrEmpty()) {
                 return CODE_NONE
@@ -124,7 +122,6 @@ class KeyConfig @JvmOverloads constructor(
         }
 
         /** 各機能のデフォルトの表示ラベルを返します */
-        @JvmStatic
         fun getDefaultLabel(code: Int): String {
             val entry = CODE_TO_ENTRY_MAP[code]
             return entry?.defaultLabel ?: ""
@@ -133,7 +130,6 @@ class KeyConfig @JvmOverloads constructor(
         /**
          * レイアウト（2次元配列）を JSON 形式の文字列に変換します。
          */
-        @JvmStatic
         fun layoutToJsonString(layout: Array<Array<KeyConfig>>): String {
             val sb = StringBuilder()
             sb.append("[\n")
@@ -168,7 +164,6 @@ class KeyConfig @JvmOverloads constructor(
         /**
          * 複数のレイアウト（通常・シフト・記号等）を含むマップを、バックアップ用の JSON 形式文字列に変換します。
          */
-        @JvmStatic
         fun backupToJsonString(layouts: Map<String, Array<Array<KeyConfig>>>): String {
             val sb = StringBuilder()
             sb.append("{\n")
@@ -192,7 +187,6 @@ class KeyConfig @JvmOverloads constructor(
         /**
          * JSON 文字列からレイアウト（KeyConfig の 2 次元配列）を復元します。
          */
-        @JvmStatic
         fun layoutFromAnyString(s: String?): Array<Array<KeyConfig>> {
             if (s.isNullOrEmpty()) {
                 return emptyArray()
@@ -236,7 +230,6 @@ class KeyConfig @JvmOverloads constructor(
         /**
          * JSON 文字列から単一の KeyConfig を生成します。
          */
-        @JvmStatic
         fun fromString(s: String?): KeyConfig {
             if (s.isNullOrEmpty()) return KeyConfig("", 1.0f)
             return try {

@@ -153,7 +153,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         updateComposingText()
     }
 
-    @JvmOverloads
     fun processShortcutKey(keyCode: Int, isShift: Boolean = false): Boolean {
         var key = keyCode
         if (isShift) {
@@ -187,7 +186,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         return false
     }
 
-    @JvmOverloads
     fun handleSpace(isShifted: Boolean = false): Boolean {
         if (composingBuffer.hasRomaji()) {
             flushRomaji()
@@ -1612,7 +1610,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         mService?.hideFloatingCandidates()
     }
 
-    @JvmOverloads
     fun changeMode(mode: InputMode, finish: Boolean = false) {
         if (finish) {
             state.finish(this)
@@ -1622,7 +1619,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         updateUI()
     }
 
-    @JvmOverloads
     fun changeState(state: InputState, finish: Boolean = false) {
         if (finish) {
             this.state.finish(this)

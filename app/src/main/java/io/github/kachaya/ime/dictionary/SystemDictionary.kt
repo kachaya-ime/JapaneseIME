@@ -268,9 +268,9 @@ class SystemDictionary(val context: Context?) {
     }
 
     open class SystemDictEntry(
-        @JvmField val surface: String,
-        @JvmField val posId: Int,
-        @JvmField val cost: Int
+        val surface: String,
+        val posId: Int,
+        val cost: Int
     )
 
     private fun String?.isNullEmpty(): Boolean = this.isNullOrEmpty()

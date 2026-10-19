@@ -14,9 +14,9 @@ object EmojiParser {
     private const val TAG = "EmojiParser"
 
     class EmojiItem(
-        @JvmField var emoji: String,
-        @JvmField var description: String,
-        @JvmField var group: String
+        var emoji: String,
+        var description: String,
+        var group: String
     )
 
     /**
@@ -25,7 +25,6 @@ object EmojiParser {
      * @param context コンテキスト
      * @return グループ名をキーとする EmojiItem リストのマップ
      */
-    @JvmStatic
     fun parse(context: Context): Map<String, List<EmojiItem>> {
         val groupMap = LinkedHashMap<String, MutableList<EmojiItem>>()
 

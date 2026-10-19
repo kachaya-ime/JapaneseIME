@@ -37,10 +37,10 @@ class LearningDictionaryTool : AppCompatActivity() {
     private var mOptionsMenu: Menu? = null
 
     class LearningItem(
-        @JvmField val key: String,
-        @JvmField val surface: String,
-        @JvmField val posId: Int,
-        @JvmField val posString: String
+        val key: String,
+        val surface: String,
+        val posId: Int,
+        val posString: String
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {

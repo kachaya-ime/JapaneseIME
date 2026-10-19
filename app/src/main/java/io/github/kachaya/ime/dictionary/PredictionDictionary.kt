@@ -232,10 +232,10 @@ class PredictionDictionary(context: Context?) {
     }
 
     class PredictionEntry(
-        @JvmField var prevWord: String?,
-        @JvmField var nextWord: String?,
-        @JvmField var frequency: Int,
-        @JvmField var lastUsed: Long
+        var prevWord: String?,
+        var nextWord: String?,
+        var frequency: Int,
+        var lastUsed: Long
     ) {
         override fun toString(): String {
             return "$prevWord ➔ $nextWord (頻度: $frequency)"

@@ -31,7 +31,6 @@ enum class InputAction(val id: String, val label: String) {
          * @param id 識別 ID 文字列
          * @return 対応する InputAction。該当しない場合は NONE
          */
-        @JvmStatic
         fun fromId(id: String?): InputAction {
             if (id == null) {
                 return NONE

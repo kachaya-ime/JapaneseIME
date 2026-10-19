@@ -20,7 +20,6 @@ object KeyShortcutManager {
      * @param keyCode キーコード
      * @return OS予約されている場合は true
      */
-    @JvmStatic
     fun isOsReserved(keyCode: Int): Boolean {
         return when (keyCode) {
             KeyEvent.KEYCODE_A,
@@ -39,7 +38,6 @@ object KeyShortcutManager {
      * @param keyCode キーコード
      * @return 予約済みの場合は true
      */
-    @JvmStatic
     fun isReserved(keyCode: Int): Boolean {
         if (isOsReserved(keyCode)) {
             return true
@@ -53,7 +51,6 @@ object KeyShortcutManager {
      * @param keyCode キーコード
      * @return 予約済みの場合は true
      */
-    @JvmStatic
     fun isSystemReserved(keyCode: Int): Boolean {
         return isReserved(keyCode)
     }
@@ -64,7 +61,6 @@ object KeyShortcutManager {
      * @param keyCode キーコード
      * @return 予約機能の説明ラベル
      */
-    @JvmStatic
     fun getReservedLabel(keyCode: Int): String {
         return when (keyCode) {
             KeyEvent.KEYCODE_A -> "システム予約 (全選択)"
@@ -83,7 +79,6 @@ object KeyShortcutManager {
      *
      * @return キーコードと InputAction のデフォルトマップ
      */
-    @JvmStatic
     fun getDefaultMappings(): Map<Int, InputAction> {
         val mappings = HashMap<Int, InputAction>()
         mappings[KeyEvent.KEYCODE_SPACE] = InputAction.TOGGLE_EN_JP
@@ -96,7 +91,6 @@ object KeyShortcutManager {
      * @param context コンテキスト
      * @return キーコードと InputAction のマップ
      */
-    @JvmStatic
     fun loadMappings(context: Context): Map<Int, InputAction> {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         return loadMappings(prefs)
@@ -108,7 +102,6 @@ object KeyShortcutManager {
      * @param prefs SharedPreferences
      * @return キーコードと InputAction のマップ
      */
-    @JvmStatic
     fun loadMappings(prefs: SharedPreferences): Map<Int, InputAction> {
         val mappings = HashMap(getDefaultMappings())
         val jsonStr = prefs.getString(PREF_KEY, null)
@@ -163,7 +156,6 @@ object KeyShortcutManager {
      * @param context コンテキスト
      * @param mappings キーコードと InputAction のマップ
      */
-    @JvmStatic
     fun saveMappings(context: Context, mappings: Map<Int, InputAction>) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         saveMappings(prefs, mappings)
@@ -175,7 +167,6 @@ object KeyShortcutManager {
      * @param prefs SharedPreferences
      * @param mappings キーコードと InputAction のマップ
      */
-    @JvmStatic
     fun saveMappings(prefs: SharedPreferences, mappings: Map<Int, InputAction>) {
         try {
             val json = JSONObject()
@@ -208,7 +199,6 @@ object KeyShortcutManager {
      *
      * @param context コンテキスト
      */
-    @JvmStatic
     fun resetToDefaults(context: Context) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         prefs.edit().remove(PREF_KEY).apply()
