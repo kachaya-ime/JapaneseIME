@@ -29,57 +29,48 @@ class Dictionary(context: Context?) {
      * @return 候補リスト
      */
     fun findCandidates(key: String): List<Candidate> {
-        val list1 = ArrayList<String>()
-        val set1 = HashSet<String>()
-
-        var cands1 = systemDictionary.getSystemDictCandidates(key)
-        if (cands1.isEmpty() && key != key.lowercase(Locale.ENGLISH)) {
-            cands1 = systemDictionary.getSystemDictCandidates(key.lowercase(Locale.ENGLISH))
+        var sysWordEntries = systemDictionary.getSystemDictWordEntries(key)
+        if (sysWordEntries.isEmpty() && key != key.lowercase(Locale.ENGLISH)) {
+            sysWordEntries = systemDictionary.getSystemDictWordEntries(key.lowercase(Locale.ENGLISH))
         }
-        for (c in cands1) {
-            if (c.isNotEmpty() && set1.add(c)) {
-                list1.add(c)
+
+        var learningEntry = learningDictionary.getLearningDictEntry(key)
+        if (learningEntry == null && key != key.lowercase(Locale.ENGLISH)) {
+            learningEntry = learningDictionary.getLearningDictEntry(key.lowercase(Locale.ENGLISH))
+        }
+
+        val learningWordEntries = ArrayList<WordEntry>()
+        if (learningEntry?.entries != null) {
+            for (le in learningEntry.entries!!) {
+                learningWordEntries.add(WordEntry(key, le.surface, le.posId, le.cost).apply {
+                    type = Candidate.Type.LEARNING
+                })
             }
         }
 
-        var entry = learningDictionary.getLearningDictEntry(key)
-        if (entry == null && key != key.lowercase(Locale.ENGLISH)) {
-            entry = learningDictionary.getLearningDictEntry(key.lowercase(Locale.ENGLISH))
-        }
-        val list2: MutableList<String>? = if (entry?.entries != null) {
-            val tmp = ArrayList<String>()
-            for (le in entry.entries!!) {
-                tmp.add(le.surface)
-            }
-            tmp
-        } else {
-            null
-        }
-
-        val learningCandsSet = HashSet<String>()
-        if (list2 != null) {
-            var idx = 0
-            for (s in list2) {
-                learningCandsSet.add(s)
-                list1.remove(s)
-                list1.add(idx++, s)
-            }
-        }
-
-        if (list1.isEmpty()) {
-            return emptyList()
-        }
-
+        val seenSurfaces = HashSet<String>()
         val candidates = ArrayList<Candidate>()
-        for (rawCand in list1) {
-            val template = rawCand
-            val isLearning = learningCandsSet.contains(rawCand)
-            val c = Candidate(rawCand, template, "Zenz AI")
-            if (isLearning) {
-                c.type = Candidate.Type.LEARNING
+
+        // Add learning entries first (preserving priority/order)
+        for (we in learningWordEntries) {
+            if (seenSurfaces.add(we.surface)) {
+                val c = Candidate(we.surface, we.surface, "Zenz AI")
+                    .setType(Candidate.Type.LEARNING)
+                    .setEntry(we)
+                candidates.add(c)
             }
-            candidates.add(c)
         }
+
+        // Add system entries
+        for (we in sysWordEntries) {
+            if (seenSurfaces.add(we.surface)) {
+                val c = Candidate(we.surface, we.surface, "Zenz AI")
+                    .setType(Candidate.Type.SYSTEM)
+                    .setEntry(we)
+                candidates.add(c)
+            }
+        }
+
         return candidates
     }
 

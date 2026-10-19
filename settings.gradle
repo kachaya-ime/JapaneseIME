@@ -20,5 +20,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "JapaneseIME"
-include ':app'
+if (!Boolean.parseBoolean(System.getProperty("skipApp", "false"))) {
+    include ':app'
+}
 include ':tool'

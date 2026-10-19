@@ -595,6 +595,19 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 val c = candidateList[index]
                 val candStr = c.candidate ?: ""
                 commitTextInternal(candStr, 1)
+
+                val key = composingBuffer.getSearchQuery()
+                val raw = c.rawCandidate
+                if (mEnableLearning && raw != null && !c.isZenz()) {
+                    val lastCand = lastCommittedCandidate
+                    if (lastCand != null) {
+                        mDictionary?.learnTransition(lastCand, candStr)
+                    }
+                    if (mDictionary != null) {
+                        learnCandidateEntries(mDictionary, c, key.ifEmpty { candStr }, raw)
+                    }
+                }
+
                 lastCommittedCandidate = candStr
                 updateIdlePredictions()
             }
@@ -615,12 +628,12 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         if (mDictionary != null) {
             val key = composingBuffer.getSearchQuery()
             val raw = c.rawCandidate
-            if (mEnableLearning && !c.isSuggestion() && !c.isPrediction() && !c.isZenz() && raw != null) {
+            if (mEnableLearning && !c.isZenz() && raw != null) {
                 val lastCand = lastCommittedCandidate
                 if (lastCand != null) {
                     mDictionary.learnTransition(lastCand, finalCandidate.toString())
                 }
-                mDictionary.addEntry(key, raw, c.getPosId(), c.getCost())
+                learnCandidateEntries(mDictionary, c, key, raw)
             }
         }
 
@@ -1545,13 +1558,15 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         val key = composingBuffer.getSearchQuery()
 
         val raw = c.rawCandidate
-        if (mEnableLearning && !c.isSuggestion() && !c.isPrediction() && !c.isZenz() && raw != null) {
+        if (mEnableLearning && !c.isZenz() && raw != null) {
             logI("Learning: key=$key, cand=$raw")
             val lastCand = lastCommittedCandidate
             if (lastCand != null) {
                 mDictionary?.learnTransition(lastCand, finalCandidate.toString())
             }
-            mDictionary?.addEntry(key, raw, c.getPosId(), c.getCost())
+            if (mDictionary != null) {
+                learnCandidateEntries(mDictionary, c, key, raw)
+            }
         } else {
             logI("Skip learning: enable=$mEnableLearning, suggestion/prediction/zenz=${c.isSuggestion() || c.isPrediction() || c.isZenz()}, raw=${raw != null}")
         }
@@ -1564,6 +1579,27 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         } else {
             changeState(InputStateIdle.INSTANCE)
         }
+    }
+
+    private fun learnCandidateEntries(dictionary: Dictionary, c: Candidate, defaultKey: String, defaultRaw: String) {
+        val pathNode = c.viterbiPathNode
+        if (pathNode != null) {
+            var curr: ViterbiDecoder.PathNode? = pathNode
+            val words = ArrayList<ViterbiDecoder.PathNode>()
+            while (curr != null && curr.prev != null) {
+                if (!curr.reading.isNullOrEmpty() && !curr.surface.isNullOrEmpty()) {
+                    words.add(0, curr)
+                }
+                curr = curr.prev
+            }
+            if (words.isNotEmpty()) {
+                for (w in words) {
+                    dictionary.addEntry(w.reading!!, w.surface!!, w.posId, w.cost)
+                }
+                return
+            }
+        }
+        dictionary.addEntry(defaultKey, defaultRaw, c.getPosId(), c.getCost())
     }
 
     fun pickCurrentSuggestion() {

@@ -201,9 +201,7 @@ class ViterbiDecoder constructor(
             return
         }
 
-        val limit = Math.min(3, finalPaths.size)
-        for (i in 0..<limit) {
-            val path = finalPaths[i]
+        for (path in finalPaths) {
             var curr: PathNode? = path
             val words = ArrayList<PathNode>()
             while (curr != null && curr.prev != null) {
@@ -211,16 +209,15 @@ class ViterbiDecoder constructor(
                 curr = curr.prev
             }
 
-            println("BOS")
-            var prevPosId = 0
+            val sb = StringBuilder()
             for (w in words) {
                 val posStr = mDictionary?.getPosString(w.posId) ?: w.posId.toString()
-                println("${w.reading}, ${w.surface}, $posStr, ${w.cost}")
-                val connCost = mDictionary?.getConnectionCost(prevPosId, w.posId) ?: 200
-                println(connCost)
-                prevPosId = w.posId
+                if (sb.isNotEmpty()) {
+                    sb.append(" ")
+                }
+                sb.append("${w.surface}(${posStr})")
             }
-            println("EOS")
+            println("[cost: ${path.totalCost}] ${sb.toString()}")
         }
     }
 

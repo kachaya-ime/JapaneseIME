@@ -363,60 +363,37 @@ class DictBuilder constructor(
     protected fun filterEntries(rawEntries: List<DictEntry>): List<DictEntry> {
         val filtered = ArrayList<DictEntry>()
 
-        for (entry in rawEntries) {
-            if (!isValidBase(entry.base)) {
-                logSkipped("base", entry)
-                continue
-            }
+        for (rawEntry in rawEntries) {
+            var entry = rawEntry
 
-            if (!isValidReading(entry.reading)) {
-                logSkipped("reading", entry)
-                continue
-            }
-
-            if ("助詞" == entry.pos && hasKatakana(entry.surface)) {
-                logSkipped("particle_surface_contains_katakana", entry)
-                continue
-            }
-
-            if (!isValidSurface(entry.surface)) {
-                logSkipped("surface", entry)
-                continue
-            }
-
+            var skip = false
             when (entry.pos) {
+                "助詞" -> {
+                    if (!entry.surface.matches("^[\\p{IsHan}\\p{IsHiragana}]+$".toRegex())) {
+                        logSkipped("particle_surface_not_hiragana", entry)
+                        skip = true
+                    }
+                }
                 "名詞" -> {
                     when (entry.pos1) {
-                        "固有名詞" -> {
-                            when (entry.pos2) {
-                                "組織" -> {
-                                    logSkipped("proper_organization", entry)
-                                    continue
-                                }
-                                "人名" -> {
-                                    when (entry.pos3) {
-                                        "一般" -> {
-                                            logSkipped("proper_person_general", entry)
-                                            continue
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                "記号" -> {
-                    when (entry.pos1) {
                         "一般" -> {
-                            when (entry.reading) {
-                                "かおもじ", "かおもじー" -> {
-                                    logSkipped("kaomoji", entry)
-                                    continue
-                                }
+                            entry = entry.withCost(entry.cost + 1000)
+                        }
+                        "固有名詞" -> {
+                            if ("組織" == entry.pos2) {
+                                entry = entry.withCost(entry.cost + 5000)
+                            } else {
+                                entry = entry.withCost(entry.cost + 3000)
                             }
                         }
                     }
                 }
+
+                else -> {}
+            }
+
+            if (skip) {
+                continue
             }
 
             filtered.add(entry)
@@ -462,13 +439,35 @@ class DictBuilder constructor(
         private const val DB_DUMP_FILENAME = "system_dict_dump.tsv"
 
         private val TARGET_FILES = listOf(
-            "Adj.csv", "Adnominal.csv", "Adverb.csv", "Auxil.csv", "Conjunction.csv",
-            "Filler.csv", "Interjection.csv", "Noun.adjv.csv", "Noun.adverbal.csv", "Noun.csv",
-            "Noun.demonst.csv", "Noun.nai.csv", "Noun.name.csv", "Noun.number.csv", "Noun.org.csv",
-            "Noun.others.csv", "Noun.place.csv", "Noun.proper.csv", "Noun.verbal.csv", "Others.csv",
-            "Postp-col.csv", "Postp.csv", "Prefix.csv", "Suffix.csv", "Symbol.csv", "Verb.csv"
+            "Adj.csv",
+            "Adnominal.csv",
+            "Adverb.csv",
+            "Auxil.csv",
+            "Conjunction.csv",
+//            "Filler.csv",
+//            "Interjection.csv",
+            "Noun.adjv.csv",
+            "Noun.adverbal.csv",
+            "Noun.csv",
+            "Noun.demonst.csv",
+            "Noun.nai.csv",
+            "Noun.name.csv",
+            "Noun.number.csv",
+            "Noun.org.csv",
+            "Noun.others.csv",
+            "Noun.place.csv",
+            "Noun.proper.csv",
+            "Noun.verbal.csv",
+//            "Others.csv",
+            "Postp-col.csv",
+            "Postp.csv",
+            "Prefix.csv",
+            "Suffix.csv",
+//            "Symbol.csv",
+            "Verb.csv"
         )
 
+        @JvmStatic
         fun main(args: Array<String>) {
             try {
                 val builder = DictBuilder()
@@ -478,6 +477,8 @@ class DictBuilder constructor(
                 e.printStackTrace()
             }
         }
+
+
 
         @Throws(IOException::class)
         fun convertLeftIdDefToBinary(inputDefPath: Path, outputPath: Path) {
@@ -522,6 +523,10 @@ class DictBuilder constructor(
 
             if (outputPath.parent != null) {
                 Files.createDirectories(outputPath.parent)
+            }
+            try {
+                Files.deleteIfExists(outputPath)
+            } catch (_: IOException) {
             }
             Files.write(outputPath, baos.toByteArray())
             println("Successfully saved binary pos_id.bin to: ${outputPath.toAbsolutePath()}")
@@ -582,6 +587,10 @@ class DictBuilder constructor(
 
             if (outputPath.parent != null) {
                 Files.createDirectories(outputPath.parent)
+            }
+            try {
+                Files.deleteIfExists(outputPath)
+            } catch (_: IOException) {
             }
             Files.write(outputPath, outBuffer.array())
             println("Successfully saved Big Endian matrix.bin to: ${outputPath.toAbsolutePath()}")
@@ -727,6 +736,10 @@ class DictBuilder constructor(
             if (outputTxtPath.parent != null) {
                 Files.createDirectories(outputTxtPath.parent)
             }
+            try {
+                Files.deleteIfExists(outputTxtPath)
+            } catch (_: IOException) {
+            }
             Files.writeString(outputTxtPath, sb.toString(), StandardCharsets.UTF_8)
             println("Successfully generated emoji.txt at: ${outputTxtPath.toAbsolutePath()}")
         }
@@ -737,6 +750,26 @@ class DictBuilder constructor(
             if (!Files.exists(dbFile)) {
                 System.err.println("DB file not found for dump: $dbFile")
                 return
+            }
+
+            val idMap = HashMap<Int, String>()
+            val defPath = dbPath.resolveSibling("mecab-ipadic").resolve("left-id.def")
+            if (Files.exists(defPath)) {
+                try {
+                    val lines = Files.readAllLines(defPath, Charset.forName("EUC-JP"))
+                    for (line in lines) {
+                        val trimmed = line.trim()
+                        if (trimmed.isEmpty() || trimmed.startsWith("#")) continue
+                        val spaceIdx = trimmed.indexOf(' ')
+                        if (spaceIdx != -1) {
+                            try {
+                                val id = trimmed.substring(0, spaceIdx).trim().toInt()
+                                val posStr = trimmed.substring(spaceIdx + 1).trim()
+                                idMap[id] = posStr
+                            } catch (_: NumberFormatException) {}
+                        }
+                    }
+                } catch (_: Exception) {}
             }
 
             println("Dumping DB to TSV: ${outputTsvPath.toAbsolutePath()}")
@@ -759,7 +792,8 @@ class DictBuilder constructor(
                                             writer.write("\t")
                                             writer.write(e.surface)
                                             writer.write("\t")
-                                            writer.write(e.posId.toString())
+                                            val posString = idMap[e.posId] ?: e.posId.toString()
+                                            writer.write(posString)
                                             writer.write("\t")
                                             writer.write(e.cost.toString())
                                             writer.newLine()

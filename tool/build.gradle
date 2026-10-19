@@ -36,6 +36,8 @@ tasks.register('runDictBuilder', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass.set('io.github.kachaya.ime.DictBuilder')
     workingDir = rootProject.projectDir
+    standardOutput = System.out
+    errorOutput = System.err
 }
 
 java {
