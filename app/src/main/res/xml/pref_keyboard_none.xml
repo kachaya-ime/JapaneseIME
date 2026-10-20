@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="画面キーボードなしの設定"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_none"
+            android:summary="変換候補をフローティングポップアップで表示します"
+            android:title="フローティング表示" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_physical_none"
+            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
+            android:title="物理キーボード接続時のフローティング表示" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

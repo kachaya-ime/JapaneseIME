@@ -15,7 +15,7 @@
         <Preference
             android:key="user_dictionary_tool"
             android:summary="学習された単語の一覧表示・編集・削除を行います"
-            android:title="@string/title_dictionary_tool">
+            android:title="@string/title_learning_dictionary_tool">
             <intent
                 android:targetClass="io.github.kachaya.ime.LearningDictionaryTool"
                 android:targetPackage="io.github.kachaya.ime" />

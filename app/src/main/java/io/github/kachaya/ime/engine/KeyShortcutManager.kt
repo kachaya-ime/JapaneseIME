@@ -14,6 +14,21 @@ object KeyShortcutManager {
     const val PREF_KEY = "ctrl_shortcuts_config"
     const val SHIFT_MASK = 0x10000
 
+    val SYMBOL_KEY_CONFIGS = arrayOf(
+        Triple(KeyEvent.KEYCODE_AT, "AT", "Ctrl + @"),
+        Triple(KeyEvent.KEYCODE_MINUS, "MINUS", "Ctrl + -"),
+        Triple(KeyEvent.KEYCODE_EQUALS, "EQUALS", "Ctrl + ="),
+        Triple(KeyEvent.KEYCODE_LEFT_BRACKET, "LEFT_BRACKET", "Ctrl + ["),
+        Triple(KeyEvent.KEYCODE_RIGHT_BRACKET, "RIGHT_BRACKET", "Ctrl + ]"),
+        Triple(KeyEvent.KEYCODE_BACKSLASH, "BACKSLASH", "Ctrl + \\"),
+        Triple(KeyEvent.KEYCODE_SEMICOLON, "SEMICOLON", "Ctrl + ;"),
+        Triple(KeyEvent.KEYCODE_APOSTROPHE, "APOSTROPHE", "Ctrl + '"),
+        Triple(KeyEvent.KEYCODE_GRAVE, "GRAVE", "Ctrl + `"),
+        Triple(KeyEvent.KEYCODE_COMMA, "COMMA", "Ctrl + ,"),
+        Triple(KeyEvent.KEYCODE_PERIOD, "PERIOD", "Ctrl + ."),
+        Triple(KeyEvent.KEYCODE_SLASH, "SLASH", "Ctrl + /")
+    )
+
     /**
      * OSで予約されている Ctrl キー組み合わせ（Ctrl+A, Ctrl+C など）かどうかを判定します。
      *
@@ -121,6 +136,22 @@ object KeyShortcutManager {
                     mappings[keyCode] = InputAction.fromId(actionId)
                 }
             }
+            for (keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) {
+                val digit = ('0' + keyCode - KeyEvent.KEYCODE_0)
+                val keyStr = "NUM_$digit"
+                if (json.has(keyStr)) {
+                    val actionId = json.getString(keyStr)
+                    mappings[keyCode] = InputAction.fromId(actionId)
+                }
+            }
+            for (triple in SYMBOL_KEY_CONFIGS) {
+                val keyCode = triple.first
+                val jsonKey = triple.second
+                if (json.has(jsonKey)) {
+                    val actionId = json.getString(jsonKey)
+                    mappings[keyCode] = InputAction.fromId(actionId)
+                }
+            }
             if (json.has("SPACE") && !isReserved(KeyEvent.KEYCODE_SPACE)) {
                 mappings[KeyEvent.KEYCODE_SPACE] = InputAction.fromId(json.getString("SPACE"))
             }
@@ -186,6 +217,16 @@ object KeyShortcutManager {
                     in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z -> {
                         val letter = ('A' + code - KeyEvent.KEYCODE_A)
                         json.put(letter.toString(), action.id)
+                    }
+                    in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> {
+                        val digit = ('0' + code - KeyEvent.KEYCODE_0)
+                        json.put("NUM_$digit", action.id)
+                    }
+                    else -> {
+                        val found = SYMBOL_KEY_CONFIGS.find { it.first == code }
+                        if (found != null) {
+                            json.put(found.second, action.id)
+                        }
                     }
                 }
             }

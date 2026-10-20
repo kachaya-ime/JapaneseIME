@@ -349,9 +349,7 @@ class KeyboardCustomizerActivity : AppCompatActivity() {
                 b.layoutParams = lp
             } else {
                 b.alpha = 1.0f
-                if (mUsedChars.contains(config.label)) {
-                    b.setTextColor(Color.WHITE)
-                } else {
+                if (!mUsedChars.contains(config.label)) {
                     b.setTextColor(Color.GRAY)
                 }
 

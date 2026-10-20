@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="記号バー設定"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="1.0"
+            android:entries="@array/keyboard_heights"
+            android:entryValues="@array/keyboard_height_values"
+            android:key="keyboard_height_scale_symbols"
+            android:title="キーボードの高さ"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_symbols"
+            android:summary="変換候補をフローティングポップアップで表示します"
+            android:title="フローティング表示" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_physical_symbols"
+            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
+            android:title="物理キーボード接続時のフローティング表示" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="キー配列のカスタマイズ"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="symbols_customizer"
+            android:summary="記号バーのキー配列をカスタマイズします"
+            android:title="記号バーのカスタマイズ">
+            <intent
+                android:targetClass="io.github.kachaya.ime.keyboard.KeyboardCustomizerActivity"
+                android:targetPackage="io.github.kachaya.ime">
+                <extra
+                    android:name="pref_key"
+                    android:value="combined_symbols" />
+                <extra
+                    android:name="title"
+                    android:value="記号バーのカスタマイズ" />
+            </intent>
+        </Preference>
+    </PreferenceCategory>
+
+</PreferenceScreen>

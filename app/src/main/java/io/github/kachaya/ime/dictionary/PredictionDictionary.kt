@@ -7,6 +7,7 @@ import android.util.Log
 
 /**
  * 連続して確定された単語間の接続関係（Bigram）を学習し、予測候補を検索・提供するクラスです。
+ * 読み、表記、品詞ID（posId）、コスト（cost）の完全なエントリ属性を保持し、最適化インデックスにより高速な予測を実現します。
  */
 class PredictionDictionary(context: Context?) {
 
@@ -17,13 +18,18 @@ class PredictionDictionary(context: Context?) {
         private const val CREATE_TABLE_SQL =
             "CREATE TABLE IF NOT EXISTS bigram_predictions (" +
                     "prev_word TEXT NOT NULL, " +
+                    "prev_reading TEXT, " +
+                    "prev_pos_id INTEGER, " +
                     "next_word TEXT NOT NULL, " +
+                    "next_reading TEXT, " +
+                    "next_pos_id INTEGER DEFAULT 0, " +
+                    "next_cost INTEGER DEFAULT 0, " +
                     "frequency INTEGER NOT NULL DEFAULT 1, " +
                     "last_used INTEGER NOT NULL, " +
                     "PRIMARY KEY (prev_word, next_word));"
 
         private const val CREATE_INDEX_SQL =
-            "CREATE INDEX IF NOT EXISTS idx_prev_word ON bigram_predictions (prev_word);"
+            "CREATE INDEX IF NOT EXISTS idx_prev_freq ON bigram_predictions (prev_word, frequency DESC, last_used DESC);"
     }
 
     private var mDbPredictionDict: SQLiteDatabase? = null
@@ -42,12 +48,28 @@ class PredictionDictionary(context: Context?) {
     private fun openOrCreateDb(path: String): SQLiteDatabase {
         val db = SQLiteDatabase.openOrCreateDatabase(path, null)
         db.execSQL(CREATE_TABLE_SQL)
+        
+        // Migrate existing tables if columns are missing
+        try { db.execSQL("ALTER TABLE bigram_predictions ADD COLUMN prev_reading TEXT;") } catch (_: Exception) {}
+        try { db.execSQL("ALTER TABLE bigram_predictions ADD COLUMN prev_pos_id INTEGER;") } catch (_: Exception) {}
+        try { db.execSQL("ALTER TABLE bigram_predictions ADD COLUMN next_reading TEXT;") } catch (_: Exception) {}
+        try { db.execSQL("ALTER TABLE bigram_predictions ADD COLUMN next_pos_id INTEGER DEFAULT 0;") } catch (_: Exception) {}
+        try { db.execSQL("ALTER TABLE bigram_predictions ADD COLUMN next_cost INTEGER DEFAULT 0;") } catch (_: Exception) {}
+
         db.execSQL(CREATE_INDEX_SQL)
         return db
     }
 
     @Synchronized
-    fun learnTransition(prevWord: String?, nextWord: String?) {
+    fun learnTransition(
+        prevWord: String?, 
+        nextWord: String?, 
+        prevReading: String? = null, 
+        prevPosId: Int? = null,
+        nextReading: String? = null, 
+        nextPosId: Int? = null,
+        nextCost: Int? = null
+    ) {
         val db = mDbPredictionDict
         if (db == null || !db.isOpen) return
         if (prevWord.isNullOrBlank() || nextWord.isNullOrBlank()) {
@@ -73,8 +95,18 @@ class PredictionDictionary(context: Context?) {
                     }
                 }
                 db.execSQL(
-                    "INSERT OR REPLACE INTO bigram_predictions (prev_word, next_word, frequency, last_used) VALUES (?, ?, ?, ?)",
-                    arrayOf<Any>(pWord, nWord, freq, now)
+                    "INSERT OR REPLACE INTO bigram_predictions (prev_word, prev_reading, prev_pos_id, next_word, next_reading, next_pos_id, next_cost, frequency, last_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf<Any?>(
+                        pWord, 
+                        prevReading?.trim(), 
+                        prevPosId, 
+                        nWord, 
+                        nextReading?.trim(), 
+                        nextPosId ?: 0, 
+                        nextCost ?: 0, 
+                        freq, 
+                        now
+                    )
                 )
                 db.setTransactionSuccessful()
             } finally {
@@ -98,12 +130,13 @@ class PredictionDictionary(context: Context?) {
         val selectionArgs: Array<String>
 
         if (!prefix.isNullOrBlank()) {
-            sql = "SELECT next_word FROM bigram_predictions " +
-                    "WHERE prev_word = ? AND next_word LIKE ? || '%' " +
+            sql = "SELECT next_word, next_reading, next_pos_id, next_cost FROM bigram_predictions " +
+                    "WHERE prev_word = ? AND (next_word LIKE ? || '%' OR next_reading LIKE ? || '%') " +
                     "ORDER BY frequency DESC, last_used DESC LIMIT ?"
-            selectionArgs = arrayOf(pWord, prefix.trim(), maxCount.toString())
+            val pref = prefix.trim()
+            selectionArgs = arrayOf(pWord, pref, pref, maxCount.toString())
         } else {
-            sql = "SELECT next_word FROM bigram_predictions " +
+            sql = "SELECT next_word, next_reading, next_pos_id, next_cost FROM bigram_predictions " +
                     "WHERE prev_word = ? " +
                     "ORDER BY frequency DESC, last_used DESC LIMIT ?"
             selectionArgs = arrayOf(pWord, maxCount.toString())
@@ -113,8 +146,15 @@ class PredictionDictionary(context: Context?) {
             db.rawQuery(sql, selectionArgs).use { cursor ->
                 while (cursor.moveToNext()) {
                     val nextWord = cursor.getString(0)
+                    val nextReading = cursor.getString(1) ?: nextWord
+                    val nextPosId = cursor.getInt(2)
+                    val nextCost = cursor.getInt(3)
+
                     val c = Candidate(nextWord, nextWord, "Zenz AI")
                     c.type = Candidate.Type.PREDICTION
+                    val we = WordEntry(nextReading, nextWord, nextPosId, nextCost)
+                    we.type = Candidate.Type.PREDICTION
+                    c.setEntry(we)
                     candidates.add(c)
                 }
             }
@@ -155,16 +195,18 @@ class PredictionDictionary(context: Context?) {
         if (db == null || !db.isOpen) return list
         try {
             db.rawQuery(
-                "SELECT prev_word, next_word, frequency, last_used FROM bigram_predictions ORDER BY frequency DESC, last_used DESC",
+                "SELECT prev_word, prev_pos_id, next_word, next_pos_id, frequency, last_used FROM bigram_predictions ORDER BY prev_word ASC, frequency DESC, last_used DESC",
                 null
             ).use { cursor ->
                 while (cursor.moveToNext()) {
                     list.add(
                         PredictionEntry(
                             cursor.getString(0),
-                            cursor.getString(1),
-                            cursor.getInt(2),
-                            cursor.getLong(3)
+                            cursor.getInt(1),
+                            cursor.getString(2),
+                            cursor.getInt(3),
+                            cursor.getInt(4),
+                            cursor.getLong(5)
                         )
                     )
                 }
@@ -233,7 +275,9 @@ class PredictionDictionary(context: Context?) {
 
     class PredictionEntry(
         var prevWord: String?,
+        var prevPosId: Int,
         var nextWord: String?,
+        var nextPosId: Int,
         var frequency: Int,
         var lastUsed: Long
     ) {

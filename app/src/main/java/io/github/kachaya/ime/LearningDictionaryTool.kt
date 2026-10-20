@@ -16,6 +16,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SearchView
 import com.google.android.material.snackbar.Snackbar
 import io.github.kachaya.ime.dictionary.Dictionary
 import io.github.kachaya.ime.dictionary.LearningDictionary
@@ -35,6 +36,9 @@ class LearningDictionaryTool : AppCompatActivity() {
 
     private var mAdapter: LearningDictionaryAdapter? = null
     private var mOptionsMenu: Menu? = null
+    private var mAllItems = ArrayList<LearningItem>()
+    private var mFilteredItems = ArrayList<LearningItem>()
+    private var mCurrentQuery = ""
 
     class LearningItem(
         val key: String,
@@ -57,8 +61,7 @@ class LearningDictionaryTool : AppCompatActivity() {
         val listView = findViewById<ListView>(R.id.list_view)
         listView.emptyView = findViewById(R.id.empty_text)
 
-        val items = ArrayList<LearningItem>()
-        val adapter = LearningDictionaryAdapter(items)
+        val adapter = LearningDictionaryAdapter(mFilteredItems)
         mAdapter = adapter
         listView.adapter = adapter
 
@@ -79,17 +82,34 @@ class LearningDictionaryTool : AppCompatActivity() {
 
     private fun refreshList() {
         val dict = mDictionary ?: return
-        val adapter = mAdapter ?: return
         val records = dict.getAllLearningRecords()
-        val items = ArrayList<LearningItem>()
+        mAllItems.clear()
         for (r in records) {
             val posString = dict.getPosString(r.posId)
-            items.add(LearningItem(r.key, r.surface, r.posId, posString))
+            mAllItems.add(LearningItem(r.key, r.surface, r.posId, posString))
         }
-        adapter.clear()
-        adapter.addAll(items)
-        adapter.notifyDataSetChanged()
+        filterAndDisplay(mCurrentQuery)
         invalidateOptionsMenu()
+    }
+
+    private fun filterAndDisplay(query: String) {
+        mCurrentQuery = query
+        mFilteredItems.clear()
+        if (query.isBlank()) {
+            mFilteredItems.addAll(mAllItems)
+        } else {
+            val q = query.lowercase()
+            for (item in mAllItems) {
+                if (item.key.lowercase().contains(q) ||
+                    item.surface.lowercase().contains(q) ||
+                    item.posString.lowercase().contains(q)) {
+                    mFilteredItems.add(item)
+                }
+            }
+        }
+
+        val adapter = mAdapter ?: return
+        adapter.notifyDataSetChanged()
     }
 
     private fun showCandidateSelectionDialog(item: LearningItem) {
@@ -109,6 +129,20 @@ class LearningDictionaryTool : AppCompatActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         mOptionsMenu = menu
         menuInflater.inflate(R.menu.dictionary_tool_menu, menu)
+        val searchItem = menu.findItem(R.id.menu_search)
+        val searchView = searchItem?.actionView as? SearchView
+        searchView?.queryHint = "学習単語を検索..."
+        searchView?.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                filterAndDisplay(query ?: "")
+                return true
+            }
+
+            override fun onQueryTextChange(newText: String?): Boolean {
+                filterAndDisplay(newText ?: "")
+                return true
+            }
+        })
         return true
     }
 
@@ -116,7 +150,7 @@ class LearningDictionaryTool : AppCompatActivity() {
         val optionsMenu = mOptionsMenu
         val adapter = mAdapter
         if (optionsMenu != null && adapter != null) {
-            val hasItems = adapter.count > 0
+            val hasItems = mAllItems.isNotEmpty()
 
             val exportItem = optionsMenu.findItem(R.id.menu_export_user)
             val clearItem = optionsMenu.findItem(R.id.menu_clear_user)

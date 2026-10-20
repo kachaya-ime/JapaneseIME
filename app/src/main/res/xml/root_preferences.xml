@@ -9,21 +9,14 @@
         app:iconSpaceReserved="false" />
 
     <Preference
-        android:title="画面キーボード設定"
-        android:summary="キーボードの種類、テーマ、バイブレーション、フォントサイズ、個別サイズ・配置"
-        app:fragment="io.github.kachaya.ime.SettingsActivity$SoftKeyboardFragment"
-        app:iconSpaceReserved="false" />
-
-    <Preference
-        android:key="category_mode_keys"
-        android:title="物理キーボード設定"
-        android:summary="記号バー表示、モード切替キー割り当て、ショートカットカスタマイズ、OS設定"
-        app:fragment="io.github.kachaya.ime.SettingsActivity$PhysicalKeyboardFragment"
+        android:title="キーボード設定"
+        android:summary="キーボードの選択、種別ごとのサイズ・レイアウト設定、テーマ、ショートカット"
+        app:fragment="io.github.kachaya.ime.SettingsActivity$KeyboardMainFragment"
         app:iconSpaceReserved="false" />
 
     <Preference
         android:title="表示・UI設定"
-        android:summary="ステータスバーアイコン、候補の注釈表示、候補バー常時表示、ツールチップ設定"
+        android:summary="ステータスバーアイコン、ツールチップ設定"
         app:fragment="io.github.kachaya.ime.SettingsActivity$DisplayUiFragment"
         app:iconSpaceReserved="false" />
 

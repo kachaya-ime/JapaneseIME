@@ -60,8 +60,6 @@ class InputView @JvmOverloads constructor(
     private var mCurrentKeyboardView: KeyboardView? = null
 
     private var mHapticEnabled = false
-    private var mShowAnnotation = true
-    private var mKeepCandidateBarVisible = false
 
     private var mAdjustedButtonHeight = 0
     private var mAdjustedCandidateHeight = 0
@@ -164,8 +162,6 @@ class InputView @JvmOverloads constructor(
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
 
         val haptic = prefs.getBoolean(PrefKeys.HAPTIC_FEEDBACK, true)
-        mShowAnnotation = prefs.getBoolean(PrefKeys.SHOW_ANNOTATION, true)
-        mKeepCandidateBarVisible = prefs.getBoolean(PrefKeys.KEEP_CANDIDATE_BAR_VISIBLE, false)
 
         val config = context.resources.configuration
         val hasHardwareKeyboard = (config.keyboard != Configuration.KEYBOARD_NOKEYS &&
@@ -173,16 +169,8 @@ class InputView @JvmOverloads constructor(
                 config.hardKeyboardHidden != Configuration.HARDKEYBOARDHIDDEN_YES)
 
         val isPhysical = mInputService?.hasHardwareKeyboardConnected() ?: hasHardwareKeyboard
-        val showSymbolBar = prefs.getBoolean(PrefKeys.PHYSICAL_KEYBOARD_SHOW_SYMBOL_BAR, true)
-        var type: String?
-        if (isPhysical) {
-            type = if (showSymbolBar) PrefKeys.KEYBOARD_TYPE_SYMBOLS else PrefKeys.KEYBOARD_TYPE_NONE
-        } else {
-            type = prefs.getString(PrefKeys.KEYBOARD_TYPE, PrefKeys.KEYBOARD_TYPE_QWERTY)
-            if (PrefKeys.KEYBOARD_TYPE_SYMBOLS == type && !showSymbolBar) {
-                type = PrefKeys.KEYBOARD_TYPE_NONE
-            }
-        }
+        val defaultType = if (isPhysical) PrefKeys.KEYBOARD_TYPE_SYMBOLS else PrefKeys.KEYBOARD_TYPE_QWERTY
+        val type = prefs.getString(PrefKeys.KEYBOARD_TYPE, defaultType)
         mStrokeAlign = prefs.getString(PrefKeys.STROKE_ALIGN, "right") ?: "right"
         mTabletAlign = prefs.getString(PrefKeys.TABLET_ALIGN, "right") ?: "right"
         var strokeWidthScale = 1.0f
@@ -709,7 +697,7 @@ class InputView @JvmOverloads constructor(
         return b
     }
 
-    fun setCandidates(candidates: List<String>?) {
+    fun setCandidates(candidates: List<String>?, selectFirst: Boolean = true) {
         clearCandidates()
         if (candidates == null) {
             return
@@ -729,10 +717,14 @@ class InputView @JvmOverloads constructor(
                 flexbox.addView(chip)
             }
         }
-        selectCandidate(0)
+        if (selectFirst) {
+            selectCandidate(0)
+        } else {
+            selectCandidate(-1)
+        }
     }
 
-    fun setCandidateObjects(candidates: List<Candidate>?) {
+    fun setCandidateObjects(candidates: List<Candidate>?, selectFirst: Boolean = true) {
         clearCandidates()
         if (candidates == null) {
             return
@@ -763,12 +755,22 @@ class InputView @JvmOverloads constructor(
                 flexbox.addView(chip)
             }
         }
-        selectCandidate(0)
+        if (selectFirst) {
+            selectCandidate(0)
+        } else {
+            selectCandidate(-1)
+        }
     }
 
     fun selectCandidate(index: Int) {
         val buttons = mCandidateButton ?: return
-        if (index < 0 || index >= buttons.size) {
+        if (index < 0) {
+            for (button in buttons) {
+                button?.isSelected = false
+            }
+            return
+        }
+        if (index >= buttons.size) {
             return
         }
         mCandidatesView.post {
@@ -830,8 +832,7 @@ class InputView @JvmOverloads constructor(
 
     fun hideCandidatesView() {
         mIsExpanded = false
-        val showBarWhenEmpty = mKeepCandidateBarVisible
-                && "none" != mKeyboardType
+        val showBarWhenEmpty = "none" != mKeyboardType
                 && (mInputService == null || !mInputService.isFloatingCandidateEnabled())
 
         val barVisibility = if (showBarWhenEmpty) VISIBLE else GONE

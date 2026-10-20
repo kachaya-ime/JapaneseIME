@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="QWERTYキーボード設定"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="1.0"
+            android:entries="@array/keyboard_heights"
+            android:entryValues="@array/keyboard_height_values"
+            android:key="keyboard_height_scale_qwerty"
+            android:title="キーボードの高さ"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="floating_candidate_qwerty"
+            android:summary="変換候補をフローティングポップアップで表示します"
+            android:title="フローティング表示" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_physical_qwerty"
+            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
+            android:title="物理キーボード接続時のフローティング表示" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="キー配列のカスタマイズ"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="keyboard_customizer_qwerty"
+            android:summary="QWERTYキーボードのキー配列をカスタマイズします"
+            android:title="QWERTYキー配列のカスタマイズ">
+            <intent
+                android:targetClass="io.github.kachaya.ime.keyboard.KeyboardCustomizerActivity"
+                android:targetPackage="io.github.kachaya.ime">
+                <extra
+                    android:name="pref_key"
+                    android:value="custom_qwerty_layout" />
+                <extra
+                    android:name="title"
+                    android:value="QWERTY配列のカスタマイズ" />
+            </intent>
+        </Preference>
+    </PreferenceCategory>
+
+</PreferenceScreen>

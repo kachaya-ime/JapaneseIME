@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">Japanese IME</string>
     <string name="title_activity_settings">Japanese IMEの設定</string>
-    <string name="title_dictionary_tool">学習辞書ツール</string>
-
+    <string name="title_learning_dictionary_tool">学習辞書ツール</string>
+    <string name="title_prediction_dictionary_tool">予測辞書ツール</string>
+    <string name="title_keyboard_customizer">キー配列のカスタマイズ</string>
+    <string name="title_shortcut_settings">ショートカットキーの設定</string>"
 </resources>

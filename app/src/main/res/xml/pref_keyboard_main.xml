@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="キーボード基本・共通設定"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="auto"
+            android:entries="@array/keyboard_themes"
+            android:entryValues="@array/keyboard_theme_values"
+            android:key="keyboard_theme"
+            android:title="キーボードのテーマ"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="haptic_feedback"
+            android:summary="画面キーボードタップ時に触覚フィードバックをおこないます"
+            android:title="キー操作時のバイブレーション" />
+
+        <ListPreference
+            android:defaultValue="24"
+            android:entries="@array/candidate_font_sizes"
+            android:entryValues="@array/candidate_font_size_values"
+            android:key="candidate_font_size"
+            android:title="候補のフォントサイズ"
+            app:useSimpleSummaryProvider="true" />
+
+        <Preference
+            android:key="ctrl_shortcut_customizer"
+            android:summary="Ctrlキーや特殊キー（Space, Enter, Tab, Backspace等）のショートカット機能をカスタマイズします"
+            android:title="ショートカットキーのカスタマイズ">
+            <intent
+                android:targetClass="io.github.kachaya.ime.ShortcutActivity"
+                android:targetPackage="io.github.kachaya.ime" />
+        </Preference>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="キーボード選択"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="qwerty"
+            android:entries="@array/keyboard_types"
+            android:entryValues="@array/keyboard_type_values"
+            android:key="keyboard_type"
+            android:title="キーボードの種類"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="キーボード種別ごとの詳細設定"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:title="QWERTYキーボード設定"
+            android:summary="高さ、フローティング表示、キー配列のカスタマイズ"
+            app:fragment="io.github.kachaya.ime.SettingsActivity$KeyboardQwertyFragment"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:title="Tabletキーボード設定"
+            android:summary="幅、高さ、寄せ方向、フローティング表示、キー配列のカスタマイズ"
+            app:fragment="io.github.kachaya.ime.SettingsActivity$KeyboardTabletFragment"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:title="ストロークキーボード設定"
+            android:summary="幅、高さ、寄せ方向、フローティング表示"
+            app:fragment="io.github.kachaya.ime.SettingsActivity$KeyboardStrokeFragment"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:title="記号バー設定"
+            android:summary="高さ、フローティング表示、キー配列のカスタマイズ"
+            app:fragment="io.github.kachaya.ime.SettingsActivity$KeyboardSymbolsFragment"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:title="画面キーボードなしの設定"
+            android:summary="フローティング表示設定"
+            app:fragment="io.github.kachaya.ime.SettingsActivity$KeyboardNoneFragment"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

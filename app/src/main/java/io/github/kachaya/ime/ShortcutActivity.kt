@@ -120,6 +120,20 @@ class ShortcutActivity : AppCompatActivity() {
             items.add(ShortcutItem(keyCode, title, isReserved, summary))
         }
 
+        for (keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) {
+            val digit = ('0' + keyCode - KeyEvent.KEYCODE_0)
+            val title = "Ctrl + $digit"
+            val action = mMappings[keyCode] ?: InputAction.NONE
+            items.add(ShortcutItem(keyCode, title, false, action.label))
+        }
+
+        for (triple in KeyShortcutManager.SYMBOL_KEY_CONFIGS) {
+            val keyCode = triple.first
+            val title = triple.third
+            val action = mMappings[keyCode] ?: InputAction.NONE
+            items.add(ShortcutItem(keyCode, title, false, action.label))
+        }
+
         val adapter = ShortcutAdapter(items)
         mAdapter = adapter
         mListView?.adapter = adapter

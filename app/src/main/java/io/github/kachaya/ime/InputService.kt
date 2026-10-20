@@ -493,7 +493,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
             mInputView = null
             setInputView(onCreateInputView())
         }
-        if ("keyboard_type" == key || "physical_keyboard_show_symbol_bar" == key) {
+        if ("keyboard_type" == key) {
             updateInputViewShown()
         }
         readPrefs()
@@ -886,11 +886,11 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
         return prefs.getBoolean(key, defaultVal)
     }
 
-    fun setCandidates(list: List<String>?) {
+    fun setCandidates(list: List<String>?, selectFirst: Boolean = true) {
         val view = mInputView
         if (view != null) {
             if (list != null && !isFloatingCandidateEnabled()) {
-                view.setCandidates(list)
+                view.setCandidates(list, selectFirst)
                 view.showCandidatesView()
             } else {
                 view.hideCandidatesView()
@@ -917,11 +917,11 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
         }
     }
 
-    fun setCandidateObjects(candidates: List<Candidate>?) {
+    fun setCandidateObjects(candidates: List<Candidate>?, selectFirst: Boolean = true) {
         val view = mInputView
         if (view != null) {
             if (candidates != null && !isFloatingCandidateEnabled()) {
-                view.setCandidateObjects(candidates)
+                view.setCandidateObjects(candidates, selectFirst)
                 view.showCandidatesView()
             } else {
                 view.hideCandidatesView()
@@ -1159,13 +1159,19 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
 
             if (!prefs.contains(PrefKeys.KEYBOARD_TYPE)) {
-                prefs.edit().putString(PrefKeys.KEYBOARD_TYPE, PrefKeys.KEYBOARD_TYPE_QWERTY).apply()
+                val isPhysical = (context as? InputService)?.hasHardwareKeyboardConnected() ?: false
+                val defaultType = if (isPhysical) PrefKeys.KEYBOARD_TYPE_SYMBOLS else PrefKeys.KEYBOARD_TYPE_QWERTY
+                prefs.edit().putString(PrefKeys.KEYBOARD_TYPE, defaultType).apply()
             }
 
             PreferenceManager.setDefaultValues(context, R.xml.root_preferences, false)
             PreferenceManager.setDefaultValues(context, R.xml.pref_input_engine, false)
-            PreferenceManager.setDefaultValues(context, R.xml.pref_soft_keyboard, false)
-            PreferenceManager.setDefaultValues(context, R.xml.pref_physical_keyboard, false)
+            PreferenceManager.setDefaultValues(context, R.xml.pref_keyboard_main, false)
+            PreferenceManager.setDefaultValues(context, R.xml.pref_keyboard_qwerty, false)
+            PreferenceManager.setDefaultValues(context, R.xml.pref_keyboard_tablet, false)
+            PreferenceManager.setDefaultValues(context, R.xml.pref_keyboard_stroke, false)
+            PreferenceManager.setDefaultValues(context, R.xml.pref_keyboard_symbols, false)
+            PreferenceManager.setDefaultValues(context, R.xml.pref_keyboard_none, false)
             PreferenceManager.setDefaultValues(context, R.xml.pref_display_ui, false)
             PreferenceManager.setDefaultValues(context,R.xml.pref_dictionary, false)
             PreferenceManager.setDefaultValues(context, R.xml.pref_backup_reset, false)

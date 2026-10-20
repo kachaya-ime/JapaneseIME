@@ -157,47 +157,39 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         }
     }
 
-    class SoftKeyboardFragment : PreferenceFragmentCompat() {
+    class KeyboardMainFragment : PreferenceFragmentCompat() {
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-            setPreferencesFromResource(R.xml.pref_soft_keyboard, rootKey)
+            setPreferencesFromResource(R.xml.pref_keyboard_main, rootKey)
         }
     }
 
-    class PhysicalKeyboardFragment : PreferenceFragmentCompat() {
+    class KeyboardQwertyFragment : PreferenceFragmentCompat() {
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-            setPreferencesFromResource(R.xml.pref_physical_keyboard, rootKey)
-
-            val openSystemKeyboardPref = findPreference<Preference>("open_system_hard_keyboard_settings")
-            openSystemKeyboardPref?.setOnPreferenceClickListener {
-                openSystemPhysicalKeyboardSettings()
-                true
-            }
+            setPreferencesFromResource(R.xml.pref_keyboard_qwerty, rootKey)
         }
+    }
 
-        private fun openSystemPhysicalKeyboardSettings() {
-            val ctx = requireContext()
-            val candidateIntents = arrayOf(
-                Intent(Settings.ACTION_HARD_KEYBOARD_SETTINGS),
-                Intent("android.settings.KEYBOARD_SETTINGS"),
-                Intent(Settings.ACTION_INPUT_METHOD_SETTINGS),
-                Intent("android.settings.INPUT_METHOD_AND_LANGUAGE_SETTINGS"),
-                Intent(Settings.ACTION_SETTINGS)
-            )
+    class KeyboardTabletFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_keyboard_tablet, rootKey)
+        }
+    }
 
-            var launched = false
-            for (intent in candidateIntents) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                try {
-                    startActivity(intent)
-                    launched = true
-                    break
-                } catch (_: Exception) {
-                }
-            }
+    class KeyboardStrokeFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_keyboard_stroke, rootKey)
+        }
+    }
 
-            if (!launched) {
-                Toast.makeText(ctx, "システム設定画面を開けませんでした", Toast.LENGTH_SHORT).show()
-            }
+    class KeyboardSymbolsFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_keyboard_symbols, rootKey)
+        }
+    }
+
+    class KeyboardNoneFragment : PreferenceFragmentCompat() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.pref_keyboard_none, rootKey)
         }
     }
 
@@ -390,10 +382,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         const val TOOLTIP_DURATION_SEC = "tooltip_duration_sec"
         const val TOOLTIP_POSITION = "tooltip_position"
 
-        const val PHYSICAL_KEYBOARD_SHOW_SYMBOL_BAR = "physical_keyboard_show_symbol_bar"
         const val HAPTIC_FEEDBACK = "haptic_feedback"
-        const val SHOW_ANNOTATION = "show_annotation"
-        const val KEEP_CANDIDATE_BAR_VISIBLE = "keep_candidate_bar_visible"
 
         const val STROKE_ALIGN = "stroke_align"
         const val TABLET_ALIGN = "tablet_align"

@@ -58,7 +58,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     private var mDisplayState: Boolean = true
     private var mUseJisx0201Kana: Boolean = false
     private var mEnableLearning: Boolean = true
-    private var mShowAnnotation: Boolean = true
 
     var lastCommittedCandidate: String? = null
 
@@ -126,7 +125,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         mDisplayState = false
         mUseJisx0201Kana = prefs.getBoolean("use_jisx0201_kana", false)
         mEnableLearning = prefs.getBoolean("enable_learning", true)
-        mShowAnnotation = prefs.getBoolean("show_annotation", true)
 
         mShortcutMap = KeyShortcutManager.loadMappings(prefs)
 
@@ -480,6 +478,9 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
     fun commitTextInternal(text: CharSequence, newCursorPosition: Int) {
         mService?.commitText(text, newCursorPosition)
+        if (isPunctuation(text.toString())) {
+            lastCommittedCandidate = null
+        }
     }
 
     fun resetOnStartInput() {
@@ -599,10 +600,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 val key = composingBuffer.getSearchQuery()
                 val raw = c.rawCandidate
                 if (mEnableLearning && raw != null && !c.isZenz()) {
-                    val lastCand = lastCommittedCandidate
-                    if (lastCand != null) {
-                        mDictionary?.learnTransition(lastCand, candStr)
-                    }
                     if (mDictionary != null) {
                         learnCandidateEntries(mDictionary, c, key.ifEmpty { candStr }, raw)
                     }
@@ -629,10 +626,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
             val key = composingBuffer.getSearchQuery()
             val raw = c.rawCandidate
             if (mEnableLearning && !c.isZenz() && raw != null) {
-                val lastCand = lastCommittedCandidate
-                if (lastCand != null) {
-                    mDictionary.learnTransition(lastCand, finalCandidate.toString())
-                }
                 learnCandidateEntries(mDictionary, c, key, raw)
             }
         }
@@ -645,12 +638,16 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
     fun updateIdlePredictions() {
         if (state != InputStateIdle.INSTANCE) return
-        val lastCand = lastCommittedCandidate
-        if (mDictionary == null || lastCand == null) {
+        var lastCand = lastCommittedCandidate
+        if (lastCand.isNullOrBlank() || isPunctuation(lastCand)) {
+            lastCand = "__BOS__"
+        }
+        val dict = mDictionary
+        if (dict == null) {
             clearCandidates()
             return
         }
-        val predictedSurfaces = mDictionary.getPredictedSurfaceWords(lastCand, 10)
+        val predictedSurfaces = dict.getPredictedSurfaceWords(lastCand, 10)
         if (predictedSurfaces.isNullOrEmpty()) {
             clearCandidates()
             return
@@ -1202,7 +1199,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     private fun updateCandidates() {
-        mService?.setCandidateObjects(candidateList)
+        mService?.setCandidateObjects(candidateList, true)
         updateFloatingCandidates()
     }
 
@@ -1318,7 +1315,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         }
         suggestionList = sugStrList
 
-        mService?.setCandidateObjects(candidateList)
+        mService?.setCandidateObjects(candidateList, false)
         updateFloatingCandidates()
 
         if (isZenzActive() && !hasUnconvertedAlphabet(query)) {
@@ -1377,7 +1374,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                     }
                     suggestionList = sugStrList
 
-                    mService?.setCandidateObjects(candidateList)
+                    mService?.setCandidateObjects(candidateList, false)
                     updateFloatingCandidates()
                 }
 
@@ -1511,11 +1508,25 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 if (surfaces.isNotEmpty()) {
                     if (mEnableLearning) {
                         val lastCand = lastCommittedCandidate
-                        if (lastCand != null) {
-                            mDictionary.learnTransition(lastCand, surfaces[0])
-                        }
-                        for (i in 0..<surfaces.size - 1) {
-                            mDictionary.learnTransition(surfaces[i], surfaces[i + 1])
+                        var prevKey = if (lastCand.isNullOrBlank() || isPunctuation(lastCand)) "__BOS__" else lastCand
+                        var prevReading: String? = null
+                        var prevPosId: Int? = null
+
+                        for (i in segments.indices) {
+                            val seg = segments[i]
+                            val selected = seg.getSelectedCandidate()
+                            val surf = seg.getSelectedSurface()
+                            if (surf.isNotEmpty()) {
+                                val reading = selected?.entry?.reading ?: seg.reading
+                                val posId = selected?.getPosId()
+                                val cost = selected?.getCost()
+                                
+                                mDictionary.learnTransition(prevKey, surf, prevReading, prevPosId, reading, posId, cost)
+                                
+                                prevKey = surf
+                                prevReading = reading
+                                prevPosId = posId
+                            }
                         }
                     }
                     lastCommittedCandidate = surfaces[surfaces.size - 1]
@@ -1560,10 +1571,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         val raw = c.rawCandidate
         if (mEnableLearning && !c.isZenz() && raw != null) {
             logI("Learning: key=$key, cand=$raw")
-            val lastCand = lastCommittedCandidate
-            if (lastCand != null) {
-                mDictionary?.learnTransition(lastCand, finalCandidate.toString())
-            }
             if (mDictionary != null) {
                 learnCandidateEntries(mDictionary, c, key, raw)
             }
@@ -1593,13 +1600,39 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 curr = curr.prev
             }
             if (words.isNotEmpty()) {
-                for (w in words) {
+                var prevSurface = lastCommittedCandidate
+
+                for (i in words.indices) {
+                    val w = words[i]
                     dictionary.addEntry(w.reading!!, w.surface!!, w.posId, w.cost)
+                    if (i == 0) {
+                        val pKey = if (prevSurface.isNullOrBlank() || isPunctuation(prevSurface)) "__BOS__" else prevSurface
+                        dictionary.learnTransition(pKey, w.surface, null, null, w.reading, w.posId, w.cost)
+                    } else {
+                        val prevW = words[i - 1]
+                        dictionary.learnTransition(prevW.surface, w.surface, prevW.reading, prevW.posId, w.reading, w.posId, w.cost)
+                    }
+                    prevSurface = w.surface
+                }
+                if (prevSurface != null) {
+                    lastCommittedCandidate = prevSurface
                 }
                 return
             }
         }
+        val candStr = c.candidate ?: defaultRaw
+        val lastCand = lastCommittedCandidate
+        val pKey = if (lastCand.isNullOrBlank() || isPunctuation(lastCand)) "__BOS__" else lastCand
+        dictionary.learnTransition(pKey, candStr, null, null, c.entry?.reading, c.getPosId(), c.getCost())
         dictionary.addEntry(defaultKey, defaultRaw, c.getPosId(), c.getCost())
+        lastCommittedCandidate = candStr
+    }
+
+    private fun isPunctuation(text: String?): Boolean {
+        if (text.isNullOrBlank()) return true
+        val trimmed = text.trim()
+        val lastChar = trimmed.last()
+        return lastChar == '。' || lastChar == '．' || lastChar == '！' || lastChar == '？' || lastChar == '.' || lastChar == '!' || lastChar == '?'
     }
 
     fun pickCurrentSuggestion() {

@@ -113,8 +113,16 @@ class Dictionary(context: Context?) {
     /**
      * 直前単語と今回単語の確定接続関係（Bigram）を学習します。
      */
-    fun learnTransition(prevWord: String?, nextWord: String?) {
-        predictionDictionary.learnTransition(prevWord, nextWord)
+    fun learnTransition(
+        prevWord: String?,
+        nextWord: String?,
+        prevReading: String? = null,
+        prevPosId: Int? = null,
+        nextReading: String? = null,
+        nextPosId: Int? = null,
+        nextCost: Int? = null
+    ) {
+        predictionDictionary.learnTransition(prevWord, nextWord, prevReading, prevPosId, nextReading, nextPosId, nextCost)
     }
 
     fun getLearningDictionaryName(): String {

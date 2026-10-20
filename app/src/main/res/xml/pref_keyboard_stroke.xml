@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="ストロークキーボード設定"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="right"
+            android:entries="@array/stroke_aligns"
+            android:entryValues="@array/stroke_align_values"
+            android:key="stroke_align"
+            android:title="キーボードの寄せ方向"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            android:defaultValue="1.0"
+            android:entries="@array/stroke_widths"
+            android:entryValues="@array/stroke_width_values"
+            android:key="stroke_width_scale"
+            android:title="キーボードの幅"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            android:defaultValue="1.0"
+            android:entries="@array/keyboard_heights"
+            android:entryValues="@array/keyboard_height_values"
+            android:key="keyboard_height_scale_stroke"
+            android:title="キーボードの高さ"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_stroke"
+            android:summary="変換候補をフローティングポップアップで表示します"
+            android:title="フローティング表示" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_physical_stroke"
+            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
+            android:title="物理キーボード接続時のフローティング表示" />
+    </PreferenceCategory>
+
+</PreferenceScreen>
