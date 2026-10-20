@@ -36,16 +36,14 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="かな漢字変換エンジン"
+        android:title="Zenz LLM 変換サポート"
         app:iconSpaceReserved="false">
 
-        <ListPreference
-            android:defaultValue="viterbi"
-            android:entries="@array/conversion_engine_entries"
-            android:entryValues="@array/conversion_engine_values"
-            android:key="conversion_engine"
-            android:title="変換エンジンの選択"
-            app:useSimpleSummaryProvider="true" />
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="zenz_enabled"
+            android:summary="変換結果一覧にZenzを使用した候補を追加します"
+            android:title="変換サポートに Zenz を使用する" />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -57,8 +55,7 @@
             android:entries="@array/zenz_thread_entries"
             android:entryValues="@array/zenz_thread_values"
             android:key="zenz_threads"
-            android:title="CPU スレッド数"
-            app:useSimpleSummaryProvider="true" />
+            android:title="CPU スレッド数" />
 
         <ListPreference
             android:defaultValue="512"

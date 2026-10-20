@@ -4,7 +4,7 @@
 
     <Preference
         android:title="入力・変換エンジン設定"
-        android:summary="起動時の入力モード、句読点、変換エンジン (Viterbi / Zenz) や生成パラメータ"
+        android:summary="起動時の入力モード、句読点、Zenz 変換サポートや各種パラメータ"
         app:fragment="io.github.kachaya.ime.SettingsActivity$InputEngineFragment"
         app:iconSpaceReserved="false" />
 

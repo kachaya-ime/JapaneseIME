@@ -3,6 +3,8 @@ package io.github.kachaya.ime.engine
 import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -18,6 +20,10 @@ import io.github.kachaya.ime.SettingsActivity
 import io.github.kachaya.ime.dictionary.Candidate
 import io.github.kachaya.ime.dictionary.Dictionary
 import io.github.kachaya.ime.zenz.ZenzEngine
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
 
@@ -27,6 +33,13 @@ import kotlin.math.min
 class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
     private val mService: InputService? = if (context is InputService) context else null
+
+    private val mDictExecutorQueue = LinkedBlockingQueue<Runnable>()
+    private val mDictExecutor = ThreadPoolExecutor(
+        1, 1, 0L, TimeUnit.MILLISECONDS, mDictExecutorQueue
+    )
+    private val mMainHandler = Handler(Looper.getMainLooper())
+    private val mSuggestionRequestId = AtomicLong(0)
 
     val composingBuffer: ComposingBuffer = ComposingBuffer()
 
@@ -70,10 +83,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
     fun isZenzActive(): Boolean {
         return zenzEngine != null && zenzEngine.isEnabled
-    }
-
-    fun isViterbiActive(): Boolean {
-        return !isZenzActive()
     }
 
     init {
@@ -130,11 +139,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
         zenzEngine?.reloadPreferences(prefs)
 
-        logI("readPrefs: useKutenJp =$useKutenJp")
-        logI("readPrefs: useToutenJp =$useToutenJp")
-        logI("readPrefs: useJisx0201Kana =$mUseJisx0201Kana")
-        logI("readPrefs: enableLearning =$mEnableLearning")
-        logI("readPrefs: displayState =$mDisplayState")
     }
 
     fun isComposing(): Boolean = composingBuffer.hasComposing()
@@ -663,7 +667,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         updateCandidates()
     }
 
-    fun hasComposing(): Boolean = composingBuffer.hasRomaji()
+    fun hasComposing(): Boolean = composingBuffer.hasComposing()
 
     fun getComposingText(): StringBuilder = composingBuffer.composingText
 
@@ -862,7 +866,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     fun getSegmentCandidates(segmentReading: String, preferredSurface: String?): List<Candidate> {
         val rawCands = ArrayList<Candidate>()
 
-        if (isViterbiActive() && mViterbiDecoder != null) {
+        if (mViterbiDecoder != null) {
             try {
                 val viterbiCands = mViterbiDecoder?.decode(segmentReading, null)
                 if (viterbiCands != null) {
@@ -879,9 +883,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 rawCands.addAll(dictCands)
             }
         }
-
-        val wideKatakana = RomajiConverter.toWideKatakana(segmentReading)
-        val halfKatakana = RomajiConverter.toHalfKatakana(segmentReading)
 
         val seen = HashSet<String>()
         val convertedCands = ArrayList<Candidate>()
@@ -918,16 +919,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                     }
                 }
             }
-        }
-
-        if (seen.add(segmentReading)) {
-            plainCands.add(Candidate(segmentReading, segmentReading, "Zenz AI"))
-        }
-        if (seen.add(wideKatakana)) {
-            plainCands.add(Candidate(wideKatakana, wideKatakana, "Zenz AI"))
-        }
-        if (seen.add(halfKatakana)) {
-            plainCands.add(Candidate(halfKatakana, halfKatakana, "Zenz AI"))
         }
 
         val merged = ArrayList<Candidate>()
@@ -977,7 +968,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
             delta,
             composingBuffer.getSearchQuery(),
             { reading, preferredSurface -> getSegmentCandidates(reading, preferredSurface) },
-            if (isViterbiActive()) mViterbiDecoder else null
+            mViterbiDecoder
         )
         if (res) {
             syncActiveSegment()
@@ -989,7 +980,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         val query = composingBuffer.getSearchQuery()
 
         val segments = ArrayList<Segment>()
-        if (isViterbiActive() && mViterbiDecoder != null) {
+        if (mViterbiDecoder != null) {
             try {
                 val viterbiCands = mViterbiDecoder?.decode(query, null)
                 if (!viterbiCands.isNullOrEmpty() && viterbiCands[0].viterbiPathNode != null) {
@@ -1044,75 +1035,42 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
         if (isZenzActive() && !hasUnconvertedAlphabet(query)) {
             val leftContext = getCleanLeftContext(20)
-            Log.i("InputEngine", "[Zenz Request] query=\"$query\", leftContext=\"$leftContext\"")
+            Log.i("InputEngine", "==> [Zenz Request Sent (Converting)] query=\"$query\", leftContext=\"$leftContext\"")
 
             zenzEngine?.convertAsync(query, leftContext, object : ZenzEngine.ConversionCallback {
                 override fun onCandidateAvailable(zenzCandidate: Candidate) {
-                    if (!state.isConverting()) return
-
                     val candStr = zenzCandidate.candidate ?: ""
-                    Log.i("InputEngine", "[Zenz Received Candidate] candidate=\"$candStr\"")
-
-                    val active = segmentManager.getActiveSegment()
-                    if (active != null) {
-                        val reading = active.reading ?: query
-                        val currentCands = active.candidates
-
-                        val zenzCands = ArrayList<Candidate>()
-                        val otherConvertedCands = ArrayList<Candidate>()
-                        val plainReadingCands = ArrayList<Candidate>()
-                        val seen = HashSet<String>()
-
-                        for (c in currentCands) {
-                            val cStr = c.candidate
-                            if (cStr != null && cStr.isNotEmpty()) {
-                                if (seen.add(cStr)) {
-                                    if (isPlainReadingCandidate(reading, cStr)) {
-                                        plainReadingCands.add(c)
-                                    } else if (c.isZenz()) {
-                                        zenzCands.add(c)
-                                    } else {
-                                        otherConvertedCands.add(c)
-                                    }
+                    Log.i("InputEngine", "<== [Zenz Response Received (Converting)] candidate=\"$candStr\" (type=${zenzCandidate.type}, query=\"$query\")")
+                    if (state.isConverting() && candStr.isNotEmpty()) {
+                        val activeSeg = segmentManager.getActiveSegment()
+                        if (activeSeg != null && activeSeg.reading == query) {
+                            var exists = false
+                            for (c in activeSeg.candidates) {
+                                if (c.candidate == candStr) {
+                                    exists = true
+                                    break
                                 }
                             }
-                        }
-
-                        if (seen.add(candStr)) {
-                            if (isPlainReadingCandidate(reading, candStr)) {
-                                plainReadingCands.add(zenzCandidate)
-                            } else {
-                                zenzCands.add(zenzCandidate)
+                            if (!exists) {
+                                val newCands = activeSeg.candidates.toMutableList()
+                                newCands.add(zenzCandidate)
+                                activeSeg.candidates = newCands
+                                syncActiveSegment()
                             }
                         }
-
-                        val newCands = ArrayList<Candidate>()
-                        newCands.addAll(zenzCands)
-                        newCands.addAll(otherConvertedCands)
-                        newCands.addAll(plainReadingCands)
-
-                        var updatedIndex = active.selectedIndex
-                        if (updatedIndex > 0) {
-                            updatedIndex++
-                        } else {
-                            updatedIndex = 0
-                        }
-
-                        candidateList = newCands
-                        active.candidates = newCands
-                        active.selectedIndex = updatedIndex
-                        mCurrentCandidateIndex = updatedIndex
-
-                        updateCandidates()
-                        updateFloatingCandidates()
-                        updateComposingText()
                     }
                 }
 
                 override fun onConversionComplete() {
-                    Log.d("InputEngine", "Zenz streaming conversion completely finished.")
+                    Log.i("InputEngine", "<== [Zenz Request Completed (Converting)] query=\"$query\"")
                 }
             })
+        } else {
+            if (!isZenzActive()) {
+                Log.d("InputEngine", "[Zenz Request Skipped (Converting)] Zenz engine is not active. (query=\"$query\")")
+            } else if (hasUnconvertedAlphabet(query)) {
+                Log.d("InputEngine", "[Zenz Request Skipped (Converting)] Query has unconverted alphabet. (query=\"$query\")")
+            }
         }
 
         return true
@@ -1193,7 +1151,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         } else if (suggestionList.isNotEmpty()) {
             val items = getAllSuggestionItems(suggestionList)
             service.showCandidateFlexboxPopup(null, items, mCurrentSuggestionIndex)
-        } else {
+        } else if (!composingBuffer.hasComposing()) {
             service.hideFloatingCandidates()
         }
     }
@@ -1204,7 +1162,9 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun updateSuggestions() {
-        if (!composingBuffer.hasComposingText()) {
+        if (!composingBuffer.hasComposing()) {
+            mSuggestionRequestId.incrementAndGet()
+            mDictExecutorQueue.clear()
             suggestionList = emptyList()
             candidateList = emptyList()
             mService?.hideCandidatesView()
@@ -1213,9 +1173,43 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         }
 
         val query = composingBuffer.getComposingTextString()
-        val rawCandidates = ArrayList<Candidate>()
+        val romaji = composingBuffer.getRomajiString()
+        val displayQuery = if (query.isNotEmpty()) query else romaji
 
-        if (isViterbiActive()) {
+        val requestId = mSuggestionRequestId.incrementAndGet()
+        mDictExecutorQueue.clear()
+
+        if (displayQuery.isNotEmpty()) {
+            val initialCands = ArrayList<Candidate>()
+            initialCands.add(Candidate(displayQuery, displayQuery, "Zenz AI"))
+
+            val wideK = RomajiConverter.toWideKatakana(displayQuery)
+            val halfK = RomajiConverter.toHalfKatakana(displayQuery)
+            if (!wideK.isNullEmpty() && wideK != displayQuery) {
+                initialCands.add(Candidate(wideK, wideK, "Zenz AI"))
+            }
+            if (!halfK.isNullEmpty() && halfK != displayQuery) {
+                initialCands.add(Candidate(halfK, halfK, "Zenz AI"))
+            }
+
+            candidateList = initialCands
+            val initialSugList = ArrayList<String>()
+            for (c in initialCands) {
+                initialSugList.add(c.candidate ?: "")
+            }
+            suggestionList = initialSugList
+            mCurrentCandidateIndex = 0
+
+            mService?.setCandidateObjects(candidateList, false)
+            updateFloatingCandidates()
+        }
+
+        mDictExecutor.execute {
+            if (requestId != mSuggestionRequestId.get()) return@execute
+            if (query.isEmpty()) return@execute
+
+            val rawCandidates = ArrayList<Candidate>()
+
             if (mViterbiDecoder != null) {
                 try {
                     val viterbiCands = mViterbiDecoder?.decode(query, null)
@@ -1227,6 +1221,8 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 }
             }
 
+            if (requestId != mSuggestionRequestId.get()) return@execute
+
             if (mDictionary != null) {
                 val dictCands = mDictionary.findCandidates(query)
                 if (dictCands != null) {
@@ -1236,6 +1232,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 val suggestionKeys = mDictionary.findSuggestions(query)
                 if (suggestionKeys != null) {
                     for (key in suggestionKeys) {
+                        if (requestId != mSuggestionRequestId.get()) return@execute
                         if (!key.isNullOrEmpty() && key != query) {
                             val keyCand = Candidate(key, key, "Zenz AI").setType(Candidate.Type.SUGGESTION)
                             rawCandidates.add(keyCand)
@@ -1253,135 +1250,110 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                     }
                 }
             }
-        }
 
-        val predictedSurfaces = HashSet<String>()
-        val lastCand = lastCommittedCandidate
-        if (mDictionary != null && lastCand != null) {
-            val predicted = mDictionary.getPredictedSurfaceWords(lastCand, 50)
-            if (predicted != null) {
-                predictedSurfaces.addAll(predicted)
+            if (requestId != mSuggestionRequestId.get()) return@execute
+
+            val predictedSurfaces = HashSet<String>()
+            val lastCand = lastCommittedCandidate
+            if (mDictionary != null && lastCand != null) {
+                val predicted = mDictionary.getPredictedSurfaceWords(lastCand, 50)
+                if (predicted != null) {
+                    predictedSurfaces.addAll(predicted)
+                }
             }
-        }
 
-        val wideKatakana = RomajiConverter.toWideKatakana(query)
-        val halfKatakana = RomajiConverter.toHalfKatakana(query)
+            if (requestId != mSuggestionRequestId.get()) return@execute
 
-        val seen = HashSet<String>()
-        val predictionList = ArrayList<Candidate>()
-        val otherList = ArrayList<Candidate>()
-        val suggestionListCands = ArrayList<Candidate>()
+            val seen = HashSet<String>()
+            val predictionList = ArrayList<Candidate>()
+            val otherList = ArrayList<Candidate>()
+            val suggestionListCands = ArrayList<Candidate>()
 
-        for (c in rawCandidates) {
-            val candStr = c.candidate
-            if (!candStr.isNullEmpty()) {
-                val key = getCandidateDisplayKey(c)
-                if (seen.add(key)) {
-                    if (predictedSurfaces.contains(candStr)) {
-                        if (c.type == Candidate.Type.SYSTEM) {
-                            c.type = Candidate.Type.PREDICTION
+            for (c in rawCandidates) {
+                val candStr = c.candidate
+                if (!candStr.isNullEmpty()) {
+                    val key = getCandidateDisplayKey(c)
+                    if (seen.add(key)) {
+                        if (predictedSurfaces.contains(candStr)) {
+                            if (c.type == Candidate.Type.SYSTEM) {
+                                c.type = Candidate.Type.PREDICTION
+                            }
+                            predictionList.add(c)
+                        } else if (c.isSuggestion()) {
+                            suggestionListCands.add(c)
+                        } else {
+                            otherList.add(c)
                         }
-                        predictionList.add(c)
-                    } else if (c.isSuggestion()) {
-                        suggestionListCands.add(c)
-                    } else {
-                        otherList.add(c)
                     }
                 }
             }
-        }
 
-        val merged = ArrayList<Candidate>()
-        merged.addAll(predictionList)
-        merged.addAll(otherList)
-        merged.addAll(suggestionListCands)
+            val merged = ArrayList<Candidate>()
+            merged.addAll(predictionList)
+            merged.addAll(otherList)
+            merged.addAll(suggestionListCands)
 
-        if (seen.add(query)) {
-            merged.add(Candidate(query, query, "Zenz AI"))
-        }
-        if (seen.add(wideKatakana)) {
-            merged.add(Candidate(wideKatakana, wideKatakana, "Zenz AI"))
-        }
-        if (seen.add(halfKatakana)) {
-            merged.add(Candidate(halfKatakana, halfKatakana, "Zenz AI"))
-        }
+            if (requestId != mSuggestionRequestId.get()) return@execute
 
-        candidateList = merged
-        mCurrentCandidateIndex = 0
-
-        val sugStrList = ArrayList<String>()
-        for (c in merged) {
-            sugStrList.add(c.candidate ?: "")
-        }
-        suggestionList = sugStrList
-
-        mService?.setCandidateObjects(candidateList, false)
-        updateFloatingCandidates()
-
-        if (isZenzActive() && !hasUnconvertedAlphabet(query)) {
-            val currentQuery = query
-            val leftContext = getCleanLeftContext(20)
-            Log.i("InputEngine", "[Zenz Live Suggest Request] query=\"$currentQuery\", leftContext=\"$leftContext\"")
-
-            zenzEngine?.convertAsync(currentQuery, leftContext, object : ZenzEngine.ConversionCallback {
-                override fun onCandidateAvailable(zenzCandidate: Candidate) {
-                    if (state != InputStateComposing.INSTANCE) return
-
-                    val nowQuery = composingBuffer.getComposingTextString()
-                    if (currentQuery != nowQuery || hasUnconvertedAlphabet(nowQuery)) {
-                        return
+            mMainHandler.post {
+                if (requestId == mSuggestionRequestId.get() && composingBuffer.hasComposing()) {
+                    candidateList = merged.ifEmpty {
+                        val fallbackQuery = composingBuffer.getComposingTextString().ifEmpty { composingBuffer.getRomajiString() }
+                        listOf(Candidate(fallbackQuery, fallbackQuery, "Zenz AI"))
                     }
+                    mCurrentCandidateIndex = 0
 
-                    val candStr = zenzCandidate.candidate ?: ""
-                    Log.i("InputEngine", "[Zenz Live Suggest Received] candidate=\"$candStr\"")
-
-                    val currentCands = ArrayList(candidateList)
-                    val seen = HashSet<String>()
-
-                    val zenzConvertedCands = ArrayList<Candidate>()
-                    val plainReadingCands = ArrayList<Candidate>()
-
-                    for (c in currentCands) {
-                        val cStr = c.candidate
-                        if (cStr != null && cStr.isNotEmpty()) {
-                            if (seen.add(cStr)) {
-                                if (isPlainReadingCandidate(nowQuery, cStr)) {
-                                    plainReadingCands.add(c)
-                                } else {
-                                    zenzConvertedCands.add(c)
-                                }
-                            }
-                        }
-                    }
-
-                    if (seen.add(candStr)) {
-                        val isZenzPlain = isPlainReadingCandidate(nowQuery, candStr)
-                        if (isZenzPlain) {
-                            plainReadingCands.add(zenzCandidate)
-                        } else {
-                            zenzConvertedCands.add(zenzCandidate)
-                        }
-                    }
-
-                    val newCands = ArrayList<Candidate>()
-                    newCands.addAll(zenzConvertedCands)
-                    newCands.addAll(plainReadingCands)
-
-                    candidateList = newCands
                     val sugStrList = ArrayList<String>()
-                    for (c in newCands) {
+                    for (c in candidateList) {
                         sugStrList.add(c.candidate ?: "")
                     }
+                    suggestionList = sugStrList
                     suggestionList = sugStrList
 
                     mService?.setCandidateObjects(candidateList, false)
                     updateFloatingCandidates()
-                }
 
-                override fun onConversionComplete() {
-                    Log.d("InputEngine", "Zenz live suggest conversion completely finished.")
+                    if (isZenzActive() && !hasUnconvertedAlphabet(query)) {
+                        val currentQuery = query
+                        val leftContext = getCleanLeftContext(20)
+                        Log.i("InputEngine", "==> [Zenz Live Suggest Request Sent] query=\"$currentQuery\", leftContext=\"$leftContext\"")
+
+                        zenzEngine?.convertAsync(currentQuery, leftContext, object : ZenzEngine.ConversionCallback {
+                            override fun onCandidateAvailable(zenzCandidate: Candidate) {
+                                val candStr = zenzCandidate.candidate ?: ""
+                                Log.i("InputEngine", "<== [Zenz Live Suggest Response Received] candidate=\"$candStr\" (type=${zenzCandidate.type}, query=\"$currentQuery\")")
+                                if (composingBuffer.getComposingTextString() == currentQuery && candStr.isNotEmpty()) {
+                                    var exists = false
+                                    for (c in candidateList) {
+                                        if (c.candidate == candStr) {
+                                            exists = true
+                                            break
+                                        }
+                                    }
+                                    if (!exists) {
+                                        val updatedList = ArrayList(candidateList)
+                                        updatedList.add(zenzCandidate)
+                                        candidateList = updatedList
+
+                                        val sugStrList = ArrayList<String>()
+                                        for (c in updatedList) {
+                                            sugStrList.add(c.candidate ?: "")
+                                        }
+                                        suggestionList = sugStrList
+
+                                        mService?.setCandidateObjects(candidateList, false)
+                                        updateFloatingCandidates()
+                                    }
+                                }
+                            }
+
+                            override fun onConversionComplete() {
+                                Log.i("InputEngine", "<== [Zenz Live Suggest Request Completed] query=\"$currentQuery\"")
+                            }
+                        })
+                    }
                 }
-            })
+            }
         }
     }
 
@@ -1660,16 +1632,20 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun reset() {
+        zenzEngine?.cancelPendingRequests()
         lastCommittedCandidate = null
         clearBuffers()
     }
 
     fun clearBuffers() {
+        zenzEngine?.cancelPendingRequests()
         composingBuffer.clearAll()
         clearCandidates()
     }
 
     fun clearCandidates() {
+        mSuggestionRequestId.incrementAndGet()
+        mDictExecutorQueue.clear()
         segmentManager.clear()
         candidateList = emptyList()
         suggestionList = emptyList()

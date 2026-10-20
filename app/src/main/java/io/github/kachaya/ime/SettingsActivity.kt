@@ -23,6 +23,7 @@ import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
+import androidx.preference.TwoStatePreference
 import io.github.kachaya.ime.keyboard.KeyConfig
 import io.github.kachaya.ime.keyboard.LayoutManager
 
@@ -119,23 +120,41 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.pref_input_engine, rootKey)
 
-            val enginePref = findPreference<ListPreference>(ZenzEngine.PREF_KEY_CONVERSION_ENGINE)
-            if (enginePref != null) {
+            val zenzSwitch = findPreference<TwoStatePreference>(ZenzEngine.PREF_KEY_ZENZ_ENABLED)
+            if (zenzSwitch != null) {
                 val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
-                if (!prefs.contains(ZenzEngine.PREF_KEY_CONVERSION_ENGINE)) {
-                    val zenzEnabled = prefs.getBoolean(ZenzEngine.PREF_KEY_ZENZ_ENABLED, false)
-                    enginePref.value = if (zenzEnabled) ZenzEngine.ENGINE_ZENZ else ZenzEngine.ENGINE_VITERBI
+                if (prefs.contains(ZenzEngine.PREF_KEY_CONVERSION_ENGINE) && !prefs.contains(ZenzEngine.PREF_KEY_ZENZ_ENABLED)) {
+                    val engineVal = prefs.getString(ZenzEngine.PREF_KEY_CONVERSION_ENGINE, ZenzEngine.ENGINE_ZENZ)
+                    zenzSwitch.isChecked = (ZenzEngine.ENGINE_ZENZ == engineVal)
                 }
 
-                enginePref.setOnPreferenceChangeListener { _, newValue ->
-                    val isZenz = ZenzEngine.ENGINE_ZENZ == newValue
-                    prefs.edit().putBoolean(ZenzEngine.PREF_KEY_ZENZ_ENABLED, isZenz).apply()
-                    updateZenzPreferencesState(isZenz)
+                zenzSwitch.setOnPreferenceChangeListener { _, newValue ->
+                    val isChecked = newValue as Boolean
+                    prefs.edit()
+                        .putBoolean(ZenzEngine.PREF_KEY_ZENZ_ENABLED, isChecked)
+                        .putString(ZenzEngine.PREF_KEY_CONVERSION_ENGINE, if (isChecked) ZenzEngine.ENGINE_ZENZ else ZenzEngine.ENGINE_VITERBI)
+                        .apply()
+                    updateZenzPreferencesState(isChecked)
                     true
                 }
 
-                val isZenz = ZenzEngine.ENGINE_ZENZ == enginePref.value
-                updateZenzPreferencesState(isZenz)
+                updateZenzPreferencesState(zenzSwitch.isChecked)
+            }
+
+            val threadPref = findPreference<ListPreference>(ZenzEngine.PREF_KEY_ZENZ_THREADS)
+            if (threadPref != null) {
+                threadPref.summaryProvider = null
+                val availableCores = Runtime.getRuntime().availableProcessors()
+                fun updateThreadSummary(value: String?) {
+                    val threads = value?.toIntOrNull() ?: 4
+                    val actualThreads = threads.coerceIn(1, maxOf(1, availableCores))
+                    threadPref.summary = "検出コア数: ${availableCores}コア / 使用スレッド数: ${actualThreads}スレッド"
+                }
+                updateThreadSummary(threadPref.value)
+                threadPref.setOnPreferenceChangeListener { _, newValue ->
+                    updateThreadSummary(newValue as? String)
+                    true
+                }
             }
         }
 

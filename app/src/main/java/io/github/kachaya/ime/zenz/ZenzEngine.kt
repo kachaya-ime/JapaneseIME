@@ -13,16 +13,22 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.Locale
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * llama.cpp と Zenz v3 (かな漢字変換LLM) を統合する変換エンジンクラスです。
  */
 class ZenzEngine(private val mContext: Context?) {
 
-    private val mExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val mExecutorQueue = LinkedBlockingQueue<Runnable>()
+    private val mExecutor: ThreadPoolExecutor = ThreadPoolExecutor(
+        1, 1, 0L, TimeUnit.MILLISECONDS, mExecutorQueue
+    )
     private val mMainHandler: Handler = Handler(Looper.getMainLooper())
+    private val mCurrentRequestId = AtomicLong(0)
 
     private var mEnabled: Boolean = false
     private var mModelPath: String = ""
@@ -95,18 +101,22 @@ class ZenzEngine(private val mContext: Context?) {
         if (prefs == null) {
             return
         }
-        val engine = prefs.getString(PREF_KEY_CONVERSION_ENGINE, null)
-        mEnabled = if (engine != null) {
-            ENGINE_ZENZ == engine
+        mEnabled = if (prefs.contains(PREF_KEY_ZENZ_ENABLED)) {
+            prefs.getBoolean(PREF_KEY_ZENZ_ENABLED, true)
         } else {
-            prefs.getBoolean(PREF_KEY_ZENZ_ENABLED, false)
+            val engine = prefs.getString(PREF_KEY_CONVERSION_ENGINE, ENGINE_ZENZ)
+            ENGINE_ZENZ == engine
         }
         mModelPath = prefs.getString(PREF_KEY_ZENZ_MODEL_PATH, "") ?: ""
-        mThreads = try {
-            prefs.getString(PREF_KEY_ZENZ_THREADS, "4")?.toInt() ?: 4
+        val availableCores = Runtime.getRuntime().availableProcessors()
+        val defaultThreads = minOf(4, maxOf(1, availableCores - 1))
+        val rawThreads = try {
+            prefs.getString(PREF_KEY_ZENZ_THREADS, defaultThreads.toString())?.toInt() ?: defaultThreads
         } catch (_: Exception) {
-            4
+            defaultThreads
         }
+        mThreads = rawThreads.coerceIn(1, maxOf(1, availableCores))
+        Log.i(TAG, "CPU Cores detected: $availableCores. Configured zenz_threads: $mThreads (user configured: $rawThreads)")
         mCtxSize = try {
             prefs.getString(PREF_KEY_ZENZ_CTX_SIZE, "512")?.toInt() ?: 512
         } catch (_: Exception) {
@@ -290,13 +300,34 @@ class ZenzEngine(private val mContext: Context?) {
         return if (isUseContext) formatZenzV3Prompt(reading, contextLeft, "") else formatZenzV3Prompt(reading, "", "")
     }
 
-    fun convertAsync(reading: String?, contextLeft: String?, callback: ConversionCallback?) {
+    /**
+     * キューに溜まっている未実行の変換リクエストをすべてキャンセルし、
+     * 実行中の変換処理も即座に中断します。
+     */
+    fun cancelPendingRequests(): Long {
+        val newId = mCurrentRequestId.incrementAndGet()
+        mExecutorQueue.clear()
+        Log.d(TAG, "All pending Zenz requests cancelled. New Request ID: $newId")
+        return newId
+    }
+
+    fun convertAsync(reading: String?, contextLeft: String?, callback: ConversionCallback?): Long {
+        val requestId = mCurrentRequestId.incrementAndGet()
+        mExecutorQueue.clear()
+
         if (!isEnabled || reading.isNullOrEmpty()) {
             callback?.onConversionComplete()
-            return
+            return requestId
         }
 
-        mExecutor.execute { convertSyncInternal(reading, contextLeft, callback) }
+        mExecutor.execute {
+            if (requestId != mCurrentRequestId.get()) {
+                Log.d(TAG, "[ZENZ REQUEST CANCELLED IN QUEUE] reqId=$requestId (current=${mCurrentRequestId.get()})")
+                return@execute
+            }
+            convertSyncInternal(requestId, reading, contextLeft, callback)
+        }
+        return requestId
     }
 
     private fun containsStopToken(text: String?): Boolean {
@@ -327,17 +358,30 @@ class ZenzEngine(private val mContext: Context?) {
         return text
     }
 
-    private fun convertSyncInternal(reading: String, contextLeft: String?, callback: ConversionCallback?) {
+    private fun isCancelled(requestId: Long): Boolean = requestId != mCurrentRequestId.get()
+
+    private fun convertSyncInternal(requestId: Long, reading: String, contextLeft: String?, callback: ConversionCallback?) {
+        if (isCancelled(requestId)) {
+            Log.d(TAG, "[ZENZ CANCELLED BEFORE START] reqId=$requestId")
+            return
+        }
+
         val prompt = formatPrompt(reading, contextLeft)
         val visiblePrompt = formatVisibleText(prompt)
-        Log.i(TAG, "==================== [ZENZ LLM TEXT SEND/RECV] ====================")
+        Log.i(TAG, "==================== [ZENZ LLM TEXT SEND/RECV] (reqId=$requestId) ====================")
         Log.i(TAG, "[ZENZ PROMPT PROCESSED]:\n$visiblePrompt<U+EE01>")
         Log.i(TAG, "------------------------------------------------------------------")
         val maxTokens = if (mMaxTokens > 0) mMaxTokens else 16
         var promptTokens = nativeTokenize(prompt, true)
+        if (isCancelled(requestId)) {
+            Log.d(TAG, "[ZENZ CANCELLED AFTER TOKENIZE] reqId=$requestId")
+            return
+        }
         if (promptTokens == null || promptTokens.isEmpty()) {
             mLastPromptTokens = null
-            callback?.let { mMainHandler.post { it.onConversionComplete() } }
+            if (!isCancelled(requestId)) {
+                callback?.let { mMainHandler.post { it.onConversionComplete() } }
+            }
             return
         }
 
@@ -358,6 +402,12 @@ class ZenzEngine(private val mContext: Context?) {
             }
         }
 
+        if (isCancelled(requestId)) {
+            Log.d(TAG, "[ZENZ CANCELLED BEFORE KV EVAL] reqId=$requestId")
+            mLastPromptTokens = null
+            return
+        }
+
         if (commonPrefixLen > 0) {
             nativeClearKvCacheAfter(commonPrefixLen)
             val diffLen = promptTokens.size - commonPrefixLen
@@ -368,7 +418,9 @@ class ZenzEngine(private val mContext: Context?) {
                     mLastPromptTokens = null
                     nativeClearKvCache()
                     if (!nativeEvalTokens(promptTokens, 0, promptTokens.size)) {
-                        callback?.let { mMainHandler.post { it.onConversionComplete() } }
+                        if (!isCancelled(requestId)) {
+                            callback?.let { mMainHandler.post { it.onConversionComplete() } }
+                        }
                         return
                     }
                 }
@@ -377,9 +429,17 @@ class ZenzEngine(private val mContext: Context?) {
             nativeClearKvCache()
             if (!nativeEvalTokens(promptTokens, 0, promptTokens.size)) {
                 mLastPromptTokens = null
-                callback?.let { mMainHandler.post { it.onConversionComplete() } }
+                if (!isCancelled(requestId)) {
+                    callback?.let { mMainHandler.post { it.onConversionComplete() } }
+                }
                 return
             }
+        }
+
+        if (isCancelled(requestId)) {
+            Log.d(TAG, "[ZENZ CANCELLED AFTER PROMPT EVAL] reqId=$requestId")
+            mLastPromptTokens = null
+            return
         }
 
         mLastPromptTokens = promptTokens
@@ -406,6 +466,11 @@ class ZenzEngine(private val mContext: Context?) {
 
         if (topTokens != null && topTokens.isNotEmpty()) {
             for (branch in topTokens.indices) {
+                if (isCancelled(requestId)) {
+                    Log.d(TAG, "[ZENZ CANCELLED IN BRANCH LOOP] reqId=$requestId")
+                    break
+                }
+
                 val firstToken = topTokens[branch]
                 if (firstToken < 0 || firstToken == eosToken) {
                     continue
@@ -432,6 +497,11 @@ class ZenzEngine(private val mContext: Context?) {
                 val temp = mTemperature
 
                 for (i in 1..<maxTokens) {
+                    if (isCancelled(requestId)) {
+                        Log.d(TAG, "[ZENZ CANCELLED IN TOKEN GEN] reqId=$requestId")
+                        break
+                    }
+
                     val currToken = nativeSampleToken(temp, topK, topP)
                     if (currToken < 0 || currToken == eosToken) {
                         break
@@ -455,6 +525,11 @@ class ZenzEngine(private val mContext: Context?) {
                     }
                 }
 
+                if (isCancelled(requestId)) {
+                    Log.d(TAG, "[ZENZ CANCELLED AFTER BRANCH GENERATION] reqId=$requestId")
+                    break
+                }
+
                 var rawText = ""
                 try {
                     rawText = outputStream.toString(StandardCharsets.UTF_8.name())
@@ -472,30 +547,22 @@ class ZenzEngine(private val mContext: Context?) {
                     val zenzCandidate = Candidate(reading, surfaceResult, "Zenz AI")
                         .setType(Candidate.Type.SYSTEM)
 
-                    callback?.let { mMainHandler.post { it.onCandidateAvailable(zenzCandidate) } }
+                    if (!isCancelled(requestId)) {
+                        callback?.let { mMainHandler.post { it.onCandidateAvailable(zenzCandidate) } }
+                    }
                 }
             }
         }
 
         nativeClearKvCacheAfter(promptLen)
 
-        if (reading.isNotEmpty()) {
-            if (addedSurfaces.add(reading)) {
-                val kanaCand = Candidate(reading, reading, "ひらがな").setType(Candidate.Type.SYSTEM)
-                callback?.let { mMainHandler.post { it.onCandidateAvailable(kanaCand) } }
-            }
-
-            val katakana = RomajiConverter.toWideKatakana(reading)
-            if (katakana != null && addedSurfaces.add(katakana)) {
-                val kataCand = Candidate(katakana, katakana, "カタカナ").setType(Candidate.Type.SYSTEM)
-                callback?.let { mMainHandler.post { it.onCandidateAvailable(kataCand) } }
-            }
+        if (!isCancelled(requestId)) {
+            Log.i(TAG, "[ZENZ COMPLETE] reqId=$requestId")
+            Log.i(TAG, "============================================================")
+            callback?.let { mMainHandler.post { it.onConversionComplete() } }
+        } else {
+            Log.i(TAG, "[ZENZ REQUEST CANCELLED/ABORTED] reqId=$requestId")
         }
-
-        Log.i(TAG, "[ZENZ COMPLETE]")
-        Log.i(TAG, "============================================================")
-
-        callback?.let { mMainHandler.post { it.onConversionComplete() } }
     }
 
     fun release() {

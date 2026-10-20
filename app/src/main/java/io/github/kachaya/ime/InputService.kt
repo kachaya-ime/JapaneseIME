@@ -243,6 +243,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
 
     override fun onFinishInputView(finishingInput: Boolean) {
         logI("onFinishInputView: finishingInput=$finishingInput")
+        mEngine?.zenzEngine?.cancelPendingRequests()
         dismissStatusUI()
         super.onFinishInputView(finishingInput)
     }
@@ -250,6 +251,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
     override fun onFinishInput() {
         logI("onFinishInput()")
         super.onFinishInput()
+        mEngine?.zenzEngine?.cancelPendingRequests()
         dismissStatusUI()
         hideCandidatesView()
         requestHideSelf(0)
@@ -258,6 +260,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
     override fun onWindowHidden() {
         logI("onWindowHidden()")
         super.onWindowHidden()
+        mEngine?.zenzEngine?.cancelPendingRequests()
         dismissStatusUI()
     }
 
@@ -322,9 +325,17 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
             val points = floatArrayOf(horizontal, top, horizontal, bottom)
             matrix.mapPoints(points)
             if (!points[0].isNaN() && !points[1].isNaN() && !points[3].isNaN()) {
+                val newTop = points[1]
+                val newBottom = points[3]
+                val yChanged = (newTop != cursorTop || newBottom != cursorBottom)
+
                 mCursorHorizontal = points[0]
-                cursorTop = points[1]
-                cursorBottom = points[3]
+                cursorTop = newTop
+                cursorBottom = newBottom
+
+                if (yChanged) {
+                    mInputView?.updateCandidatePopupPosition()
+                }
             }
         }
 
@@ -333,7 +344,6 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
         }
 
         updateTooltipPosition()
-        mInputView?.updateCandidatePopupPosition()
 
         performTooltipUpdate()
     }

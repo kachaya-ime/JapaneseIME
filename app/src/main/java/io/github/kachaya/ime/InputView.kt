@@ -2,6 +2,7 @@ package io.github.kachaya.ime
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.util.Log
@@ -81,6 +82,7 @@ class InputView @JvmOverloads constructor(
     private var mModeIconResId = 0
 
     private var mCandidateButton: Array<Button?>? = null
+    private var mDefaultCandidateTextColorStateList: ColorStateList? = null
 
     private var mLastEditorInfo: EditorInfo? = null
 
@@ -88,6 +90,8 @@ class InputView @JvmOverloads constructor(
     private var mRowCount = 4
 
     private var mCandidatePopup: PopupWindow? = null
+    private var mLastPopupY: Int = -1
+    private var mLastPopupHeight: Int = -1
 
     init {
         val layout = LayoutInflater.from(themedContext).inflate(R.layout.input, this)
@@ -677,13 +681,24 @@ class InputView @JvmOverloads constructor(
     }
 
     private fun clearCandidates() {
-        mCandidatesLayout.removeAllViews()
-        mCandidateExpandedFlexbox?.removeAllViews()
+        hideExcessCandidateButtons(mCandidatesLayout, 0)
+        mCandidateExpandedFlexbox?.let { hideExcessCandidateButtons(it, 0) }
         mCandidateButton = null
     }
 
-    private fun createCandidateButton(parent: ViewGroup, index: Int, text: CharSequence, isUserDict: Boolean): Button {
-        val b = LayoutInflater.from(context).inflate(R.layout.candidate_inputview_chip_item, parent, false) as Button
+    private fun bindCandidateButton(container: ViewGroup, index: Int, text: CharSequence, isUserDict: Boolean): Button {
+        val b: Button
+        if (index < container.childCount) {
+            b = container.getChildAt(index) as Button
+        } else {
+            b = LayoutInflater.from(context).inflate(R.layout.candidate_inputview_chip_item, container, false) as Button
+            if (mDefaultCandidateTextColorStateList == null) {
+                mDefaultCandidateTextColorStateList = b.textColors
+            }
+            container.addView(b)
+        }
+
+        b.visibility = VISIBLE
         b.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize)
         if (mAdjustedCandidateHeight > 0) {
             b.minHeight = mAdjustedCandidateHeight
@@ -691,32 +706,49 @@ class InputView @JvmOverloads constructor(
         b.text = text
         if (isUserDict) {
             b.setTextColor(ContextCompat.getColor(context, R.color.candidate_user_dict_fg))
+        } else {
+            mDefaultCandidateTextColorStateList?.let { b.setTextColor(it) }
         }
         b.setOnClickListener { v -> onClickCandidateButton(v) }
         b.tag = index
+        b.isSelected = false
         return b
     }
 
+    private fun hideExcessCandidateButtons(container: ViewGroup, targetCount: Int) {
+        for (i in targetCount until container.childCount) {
+            container.getChildAt(i).visibility = GONE
+        }
+    }
+
     fun setCandidates(candidates: List<String>?, selectFirst: Boolean = true) {
-        clearCandidates()
-        if (candidates == null) {
+        if (candidates.isNullOrEmpty()) {
+            clearCandidates()
             return
         }
 
-        mCandidateButton = arrayOfNulls(candidates.size)
+        val buttons = arrayOfNulls<Button>(candidates.size)
 
         for (i in candidates.indices) {
             val text = candidates[i]
-            val b = createCandidateButton(mCandidatesLayout, i, text, false)
-            mCandidatesLayout.addView(b)
-            mCandidateButton?.set(i, b)
+
+            val b = bindCandidateButton(mCandidatesLayout, i, text, false)
+            buttons[i] = b
 
             val flexbox = mCandidateExpandedFlexbox
             if (flexbox != null) {
-                val chip = createCandidateButton(flexbox, i, text, false)
-                flexbox.addView(chip)
+                bindCandidateButton(flexbox, i, text, false)
             }
         }
+
+        hideExcessCandidateButtons(mCandidatesLayout, candidates.size)
+        val flexbox = mCandidateExpandedFlexbox
+        if (flexbox != null) {
+            hideExcessCandidateButtons(flexbox, candidates.size)
+        }
+
+        mCandidateButton = buttons
+
         if (selectFirst) {
             selectCandidate(0)
         } else {
@@ -725,8 +757,8 @@ class InputView @JvmOverloads constructor(
     }
 
     fun setCandidateObjects(candidates: List<Candidate>?, selectFirst: Boolean = true) {
-        clearCandidates()
-        if (candidates == null) {
+        if (candidates.isNullOrEmpty()) {
+            clearCandidates()
             return
         }
 
@@ -739,22 +771,30 @@ class InputView @JvmOverloads constructor(
             }
         }
 
-        mCandidateButton = arrayOfNulls(filtered.size)
+        val buttons = arrayOfNulls<Button>(filtered.size)
 
         for (i in filtered.indices) {
             val c = filtered[i]
             val formatted = c.getFormattedText(c.candidate ?: "")
+            val isLearning = c.isLearningWord()
 
-            val b = createCandidateButton(mCandidatesLayout, i, formatted, c.isLearningWord())
-            mCandidatesLayout.addView(b)
-            mCandidateButton?.set(i, b)
+            val b = bindCandidateButton(mCandidatesLayout, i, formatted, isLearning)
+            buttons[i] = b
 
             val flexbox = mCandidateExpandedFlexbox
             if (flexbox != null) {
-                val chip = createCandidateButton(flexbox, i, formatted, c.isLearningWord())
-                flexbox.addView(chip)
+                bindCandidateButton(flexbox, i, formatted, isLearning)
             }
         }
+
+        hideExcessCandidateButtons(mCandidatesLayout, filtered.size)
+        val flexbox = mCandidateExpandedFlexbox
+        if (flexbox != null) {
+            hideExcessCandidateButtons(flexbox, filtered.size)
+        }
+
+        mCandidateButton = buttons
+
         if (selectFirst) {
             selectCandidate(0)
         } else {
@@ -854,6 +894,8 @@ class InputView @JvmOverloads constructor(
         if (popup != null && popup.isShowing) {
             popup.dismiss()
         }
+        mLastPopupY = -1
+        mLastPopupHeight = -1
     }
 
     fun updateCandidatePopupPosition() {
@@ -862,16 +904,24 @@ class InputView @JvmOverloads constructor(
             return
         }
         if (mInputService != null && mInputService.isCursorInvisible) {
-            popup.dismiss()
+            hideFullWidthCandidatePopup()
             return
         }
 
         val contentView = popup.contentView ?: return
         val coordsAndSize = calculateCandidatePopupScreenCoordinates(contentView)
-        showPopupAtScreenLocationWithSize(
-            popup, coordsAndSize[0], coordsAndSize[1],
-            resources.displayMetrics.widthPixels, coordsAndSize[2]
-        )
+        val targetX = coordsAndSize[0]
+        val targetY = coordsAndSize[1]
+        val height = coordsAndSize[2]
+
+        if (targetY != mLastPopupY || height != mLastPopupHeight) {
+            mLastPopupY = targetY
+            mLastPopupHeight = height
+            showPopupAtScreenLocationWithSize(
+                popup, targetX, targetY,
+                resources.displayMetrics.widthPixels, height
+            )
+        }
     }
 
     @SuppressLint("DiscouragedApi", "InternalInsetResource")
@@ -1008,7 +1058,6 @@ class InputView @JvmOverloads constructor(
             } else {
                 popup.isClippingEnabled = false
                 popup.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y)
-                popup.update(x, y, width, height)
             }
         } catch (_: Exception) {
         }
@@ -1017,30 +1066,17 @@ class InputView @JvmOverloads constructor(
     fun showCandidateFlexboxPopup(header: String?, items: List<String>?, selectedIdx: Int) {
         val screenWidth = resources.displayMetrics.widthPixels
 
-        var popupView: View? = null
-        val popup = mCandidatePopup
-        if (popup != null && popup.isShowing) {
-            val current = popup.contentView
-            if (current != null && current.findViewById<View>(R.id.candidate_flexbox) != null) {
-                popupView = current
-            }
-        }
-
-        if (popupView == null) {
+        if (mCandidatePopup == null) {
             val inflater = LayoutInflater.from(context)
-            popupView = inflater.inflate(R.layout.candidate_floating, null)
-
-            if (popup != null && popup.isShowing) {
-                popup.contentView = popupView
-            } else {
-                mCandidatePopup = PopupWindow(popupView, screenWidth, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    isFocusable = false
-                    animationStyle = 0
-                }
+            val popupView = inflater.inflate(R.layout.candidate_floating, null)
+            mCandidatePopup = PopupWindow(popupView, screenWidth, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                isFocusable = false
+                animationStyle = 0
             }
         }
 
-        val finalPopupView = popupView!!
+        val popup = mCandidatePopup!!
+        val finalPopupView = popup.contentView!!
         val headerView = finalPopupView.findViewById<TextView>(R.id.candidate_header)
         val flexbox = finalPopupView.findViewById<FlexboxLayout>(R.id.candidate_flexbox)
 
@@ -1053,42 +1089,37 @@ class InputView @JvmOverloads constructor(
             }
         }
 
-        if (flexbox != null && items != null) {
-            val sameSize = (flexbox.childCount == items.size)
-            if (sameSize) {
-                for (i in items.indices) {
-                    val child = flexbox.getChildAt(i)
-                    if (child is TextView) {
-                        child.text = items[i]
-                        child.isSelected = (i == selectedIdx)
-                    }
-                }
-                scrollToSelectedChip(finalPopupView, flexbox, selectedIdx)
-            } else {
-                flexbox.removeAllViews()
-                val inflater = LayoutInflater.from(context)
-                for (i in items.indices) {
-                    val chip = inflater.inflate(R.layout.candidate_floating_chip_item, flexbox, false) as TextView
-                    chip.text = items[i]
-                    val index = i
-                    chip.setOnClickListener {
-                        mInputService?.pickCandidateViewManually(index)
-                    }
-                    chip.isSelected = (i == selectedIdx)
+        if (flexbox != null && !items.isNullOrEmpty()) {
+            val count = items.size
+            for (i in items.indices) {
+                val chip: TextView
+                if (i < flexbox.childCount) {
+                    chip = flexbox.getChildAt(i) as TextView
+                } else {
+                    val inflater = LayoutInflater.from(context)
+                    chip = inflater.inflate(R.layout.candidate_floating_chip_item, flexbox, false) as TextView
                     flexbox.addView(chip)
                 }
-
-                flexbox.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-                    override fun onGlobalLayout() {
-                        flexbox.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                        scrollToSelectedChip(finalPopupView, flexbox, selectedIdx)
-                    }
-                })
+                chip.visibility = VISIBLE
+                chip.text = items[i]
+                val index = i
+                chip.setOnClickListener {
+                    mInputService?.pickCandidateViewManually(index)
+                }
+                chip.isSelected = (i == selectedIdx)
             }
+
+            for (i in count until flexbox.childCount) {
+                flexbox.getChildAt(i).visibility = GONE
+            }
+
+            scrollToSelectedChip(finalPopupView, flexbox, selectedIdx)
         }
 
         val coordsAndSize = calculateCandidatePopupScreenCoordinates(finalPopupView)
-        mCandidatePopup?.let { showPopupAtScreenLocationWithSize(it, coordsAndSize[0], coordsAndSize[1], screenWidth, coordsAndSize[2]) }
+        mLastPopupY = coordsAndSize[1]
+        mLastPopupHeight = coordsAndSize[2]
+        showPopupAtScreenLocationWithSize(popup, coordsAndSize[0], coordsAndSize[1], screenWidth, coordsAndSize[2])
     }
 
     private fun scrollToSelectedChip(popupView: View, flexbox: FlexboxLayout, selectedIdx: Int) {
