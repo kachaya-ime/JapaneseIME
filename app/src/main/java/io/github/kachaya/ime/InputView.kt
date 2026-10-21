@@ -626,7 +626,7 @@ class InputView @JvmOverloads constructor(
         mInputService?.pickCandidateViewManually(index)
     }
 
-    private fun toggleExpanded() {
+    fun toggleExpanded() {
         mIsExpanded = !mIsExpanded
         updateExpansionState()
     }
@@ -721,7 +721,7 @@ class InputView @JvmOverloads constructor(
         }
     }
 
-    fun setCandidates(candidates: List<String>?, selectFirst: Boolean = true) {
+    fun setCandidates(candidates: List<String>?, selectFirst: Boolean = false) {
         if (candidates.isNullOrEmpty()) {
             clearCandidates()
             return
@@ -756,7 +756,7 @@ class InputView @JvmOverloads constructor(
         }
     }
 
-    fun setCandidateObjects(candidates: List<Candidate>?, selectFirst: Boolean = true) {
+    fun setCandidateObjects(candidates: List<Candidate>?, selectFirst: Boolean = false) {
         if (candidates.isNullOrEmpty()) {
             clearCandidates()
             return
@@ -807,6 +807,12 @@ class InputView @JvmOverloads constructor(
         if (index < 0) {
             for (button in buttons) {
                 button?.isSelected = false
+            }
+            val flexbox = mCandidateExpandedFlexbox
+            if (flexbox != null) {
+                for (i in 0..<flexbox.childCount) {
+                    flexbox.getChildAt(i).isSelected = false
+                }
             }
             return
         }

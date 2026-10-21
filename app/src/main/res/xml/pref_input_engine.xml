@@ -36,6 +36,24 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:title="Viterbi 変換設定"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="viterbi_enabled"
+            android:summaryOff="Viterbi による統計的かな漢字変換を行いません"
+            android:summaryOn="Viterbi による統計的かな漢字変換を行います"
+            android:title="Viterbi 変換を使用する" />
+
+        <EditTextPreference
+            android:defaultValue="10"
+            android:key="viterbi_nbest"
+            android:title="N-best 候補検索数 (viterbi_nbest)"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="Zenz LLM 変換サポート"
         app:iconSpaceReserved="false">
 

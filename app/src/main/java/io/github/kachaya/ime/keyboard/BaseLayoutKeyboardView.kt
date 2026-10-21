@@ -199,3 +199,19 @@ abstract class BaseLayoutKeyboardView @JvmOverloads constructor(
         }
     }
 }
+
+/**
+ * QWERTY 配列のソフトウェアキーボードを表示・管理するビューです。
+ */
+class QwertyKeyboardView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null
+) : BaseLayoutKeyboardView(context, attrs, "custom_qwerty_layout")
+
+/**
+ * Tablet 配列のソフトウェアキーボードを表示・管理するビューです。
+ */
+class TabletKeyboardView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null
+) : BaseLayoutKeyboardView(context, attrs, "custom_tablet_layout")

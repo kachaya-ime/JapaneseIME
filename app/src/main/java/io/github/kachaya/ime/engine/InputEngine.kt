@@ -18,7 +18,10 @@ import io.github.kachaya.ime.InputService
 import io.github.kachaya.ime.R
 import io.github.kachaya.ime.SettingsActivity
 import io.github.kachaya.ime.dictionary.Candidate
+import io.github.kachaya.ime.dictionary.CandidateLearner
 import io.github.kachaya.ime.dictionary.Dictionary
+import io.github.kachaya.ime.viterbi.ViterbiDecoder
+import io.github.kachaya.ime.viterbi.ViterbiEngine
 import io.github.kachaya.ime.zenz.ZenzEngine
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
@@ -30,16 +33,18 @@ import kotlin.math.min
 /**
  * 入力・変換ロジックを統括するエンジンクラスです。
  */
-class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
+class InputEngine(
+    val context: Context?,
+    val mDictionary: Dictionary?,
+    bridge: InputEngineUiBridge? = null
+) {
+    val uiBridge: InputEngineUiBridge? = bridge ?: if (context is InputService) InputServiceUiBridge(context) else null
 
-    private val mService: InputService? = if (context is InputService) context else null
+    val mService: InputService?
+        get() = if (context is InputService) context else null
 
-    private val mDictExecutorQueue = LinkedBlockingQueue<Runnable>()
-    private val mDictExecutor = ThreadPoolExecutor(
-        1, 1, 0L, TimeUnit.MILLISECONDS, mDictExecutorQueue
-    )
-    private val mMainHandler = Handler(Looper.getMainLooper())
-    private val mSuggestionRequestId = AtomicLong(0)
+    val suggestionProvider: SuggestionProvider = SuggestionProvider()
+    val candidateLearner: CandidateLearner? = if (mDictionary != null) CandidateLearner(mDictionary) else null
 
     val composingBuffer: ComposingBuffer = ComposingBuffer()
 
@@ -47,8 +52,8 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         return composingBuffer.romajiBuffer
     }
 
-    private var mColorComposing: Int = 0
-    private var mColorConverting: Int = 0
+    var mColorComposing: Int = 0
+    var mColorConverting: Int = 0
 
     private val mFullWidthSeparatorMap: MutableMap<String, String> = HashMap()
 
@@ -61,33 +66,41 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     var candidateList: List<Candidate> = emptyList()
         private set
 
-    private var mCurrentCandidateIndex: Int = 0
+    var mCurrentCandidateIndex: Int = -1
 
     var suggestionList: List<String> = emptyList()
         private set
 
-    private var mCurrentSuggestionIndex: Int = 0
+    var mCurrentSuggestionIndex: Int = -1
+
+    companion object {
+        const val PREF_KEY_VITERBI_ENABLED = "viterbi_enabled"
+        const val PREF_KEY_VITERBI_NBEST = "viterbi_nbest"
+        const val DEFAULT_VITERBI_NBEST = 10
+    }
 
     private var mDisplayState: Boolean = true
     private var mUseJisx0201Kana: Boolean = false
-    private var mEnableLearning: Boolean = true
+    var mEnableLearning: Boolean = true
+    private var mViterbiNBest: Int = DEFAULT_VITERBI_NBEST
 
     var lastCommittedCandidate: String? = null
 
     private var mShortcutMap: Map<Int, InputAction>? = null
-    private var mViterbiDecoder: ViterbiDecoder? = null
+
+    val viterbiEngine: ViterbiEngine = ViterbiEngine(mDictionary, mViterbiNBest)
+    val zenzEngine: ZenzEngine? = if (context != null) ZenzEngine(context) else null
+
+    val mViterbiDecoder: ViterbiDecoder?
+        get() = viterbiEngine.viterbiDecoder
 
     val segmentManager: SegmentManager = SegmentManager()
-
-    val zenzEngine: ZenzEngine? = if (context != null) ZenzEngine(context) else null
 
     fun isZenzActive(): Boolean {
         return zenzEngine != null && zenzEngine.isEnabled
     }
 
     init {
-        mViterbiDecoder = ViterbiDecoder(mDictionary, 20)
-
         mFullWidthSeparatorMap["."] = "。"
         RomajiConverter.setSeparator(".", "。")
         mFullWidthSeparatorMap[","] = "、"
@@ -134,6 +147,16 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         mDisplayState = false
         mUseJisx0201Kana = prefs.getBoolean("use_jisx0201_kana", false)
         mEnableLearning = prefs.getBoolean("enable_learning", true)
+
+        viterbiEngine.isEnabled = prefs.getBoolean(PREF_KEY_VITERBI_ENABLED, true)
+        val nbestStr = prefs.getString(PREF_KEY_VITERBI_NBEST, DEFAULT_VITERBI_NBEST.toString()) ?: DEFAULT_VITERBI_NBEST.toString()
+        val nbest = try {
+            nbestStr.toInt().coerceAtLeast(1)
+        } catch (_: Exception) {
+            DEFAULT_VITERBI_NBEST
+        }
+        mViterbiNBest = nbest
+        viterbiEngine.updateNBest(mViterbiNBest)
 
         mShortcutMap = KeyShortcutManager.loadMappings(prefs)
 
@@ -200,13 +223,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun handleDpadLeft(isShifted: Boolean): Boolean {
-        if (state.isConverting()) {
-            if (isShifted) {
-                if (resizeFocusedSegment(-1)) {
-                    return true
-                }
-            }
-        }
         if (state.processDpadLeft(this, isShifted)) {
             updateComposingText()
             return true
@@ -215,13 +231,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun handleDpadRight(isShifted: Boolean): Boolean {
-        if (state.isConverting()) {
-            if (isShifted) {
-                if (resizeFocusedSegment(1)) {
-                    return true
-                }
-            }
-        }
         if (state.processDpadRight(this, isShifted)) {
             updateComposingText()
             return true
@@ -246,37 +255,48 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun sendDownUpKeyEvents(keyCode: Int) {
-        mService?.sendDownUpKeyEvents(keyCode)
+        uiBridge?.sendDownUpKeyEvents(keyCode)
     }
 
     fun sendShiftEnter() {
-        val ic = mService?.currentInputConnection
-        if (ic != null) {
-            val now = SystemClock.uptimeMillis()
-            val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER, 0, KeyEvent.META_SHIFT_ON)
-            val up = KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER, 0, KeyEvent.META_SHIFT_ON)
-            ic.sendKeyEvent(down)
-            ic.sendKeyEvent(up)
+        uiBridge?.sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
+    }
+
+    fun processDigitOrSymbol(code: Int) {
+        flushRomaji()
+        val isUpper = code in 'A'.code..'Z'.code
+        val ch = String(Character.toChars(code))
+        val converted = mode.convertText(ch).toString()
+        commitRomajiText(converted, converted.firstOrNull() ?: ch[0], isUpper)
+    }
+
+    fun processDirectText(text: CharSequence) {
+        if (text.isEmpty()) return
+        flushRomaji()
+        val converted = mode.convertText(text)
+        if (state.isConverting()) {
+            pickCurrentCandidate()
         }
+        if (state.isTransient()) {
+            state.processText(this, converted.toString(), converted.firstOrNull() ?: ' ', false)
+        } else {
+            commitTextInternal(converted, 1)
+            lastCommittedCandidate = converted.toString()
+            updateIdlePredictions()
+        }
+        updateComposingText()
     }
 
     fun processRomaji(code: Int) {
-        var currentCode = code
-        if (currentCode == ' '.code) {
-            flushRomaji()
-            commitRomajiText(" ", ' ', false)
+        if (!Character.isLetter(code)) {
+            processDigitOrSymbol(code)
             return
         }
 
+        var currentCode = code
         val isUpper = currentCode in 'A'.code..'Z'.code
         if (isUpper) {
             currentCode = Character.toLowerCase(currentCode)
-        }
-
-        if (Character.isDigit(currentCode)) {
-            flushRomaji()
-            commitRomajiText(currentCode.toChar().toString(), currentCode.toChar(), isUpper)
-            return
         }
 
         composingBuffer.appendRomaji(currentCode.toChar())
@@ -410,49 +430,29 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun handleKillLine(): Boolean {
-        val ic = mService?.currentInputConnection ?: return false
-        val textAfter = ic.getTextAfterCursor(2000, 0)
-        if (textAfter.isNullEmpty()) {
-            return false
-        }
-        val textStr = textAfter?.toString() ?: ""
-        val len: Int
-        var newlineIdx = -1
-        for (i in textStr.indices) {
-            if (textStr[i] == '\n' || textStr[i] == '\r') {
-                newlineIdx = i
-                break
-            }
-        }
-        len = when {
-            newlineIdx == 0 -> 1
-            newlineIdx > 0 -> newlineIdx
-            else -> textStr.length
-        }
-        return ic.deleteSurroundingText(0, len)
+        val bridge = uiBridge ?: return false
+        return bridge.deleteSurroundingText(0, 2000)
     }
 
     fun handleKillLineBackward(): Boolean {
-        val ic = mService?.currentInputConnection ?: return false
-        val textBefore = ic.getTextBeforeCursor(2000, 0)
-        if (textBefore.isNullEmpty()) {
+        val bridge = uiBridge ?: return false
+        val textBefore = bridge.getTextBeforeCursor(2000)
+        if (textBefore.isEmpty()) {
             return false
         }
-        val textStr = textBefore?.toString() ?: ""
-        val len: Int
         var newlineIdx = -1
-        for (i in textStr.length - 1 downTo 0) {
-            if (textStr[i] == '\n' || textStr[i] == '\r') {
+        for (i in textBefore.length - 1 downTo 0) {
+            if (textBefore[i] == '\n' || textBefore[i] == '\r') {
                 newlineIdx = i
                 break
             }
         }
-        len = when {
-            newlineIdx == textStr.length - 1 -> 1
-            newlineIdx >= 0 -> textStr.length - 1 - newlineIdx
-            else -> textStr.length
+        val len = when {
+            newlineIdx == textBefore.length - 1 -> 1
+            newlineIdx >= 0 -> textBefore.length - 1 - newlineIdx
+            else -> textBefore.length
         }
-        return ic.deleteSurroundingText(len, 0)
+        return bridge.deleteSurroundingText(len, 0)
     }
 
     fun launchSettings() {
@@ -464,6 +464,10 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         } catch (e: Exception) {
             Log.e("InputEngine", "Failed to launch SettingsActivity", e)
         }
+    }
+
+    fun toggleExpandCandidates() {
+        uiBridge?.toggleExpandCandidates()
     }
 
     fun openEmojiPicker() {
@@ -481,7 +485,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun commitTextInternal(text: CharSequence, newCursorPosition: Int) {
-        mService?.commitText(text, newCursorPosition)
+        uiBridge?.commitText(text, newCursorPosition)
         if (isPunctuation(text.toString())) {
             lastCommittedCandidate = null
         }
@@ -492,7 +496,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         if (state.isTransient()) {
             changeState(InputStateIdle.INSTANCE)
         }
-        mService?.requestUIUpdate()
+        uiBridge?.requestUIUpdate()
         updateComposingText()
     }
 
@@ -519,40 +523,30 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
         val listSize = suggestionList.size
         if (nextIndex > listSize - 1) {
-            nextIndex = 0
-        } else if (nextIndex < 0) {
+            nextIndex = -1
+        } else if (nextIndex < -1) {
             nextIndex = listSize - 1
         }
 
         mCurrentSuggestionIndex = nextIndex
-        mService?.requestChooseCandidate(mCurrentSuggestionIndex)
+        uiBridge?.requestChooseCandidate(mCurrentSuggestionIndex)
         updateFloatingCandidates()
     }
 
     fun chooseNextCandidate() {
-        chooseCandidateInternal(true)
-    }
-
-    fun choosePrevCandidate() {
-        chooseCandidateInternal(false)
-    }
-
-    private fun chooseCandidateInternal(isForward: Boolean) {
         if (segmentManager.hasSegments()) {
             val active = segmentManager.getActiveSegment()
             if (active == null || active.candidates.isEmpty()) return
             val listSize = active.candidates.size
-            var nextIndex = active.selectedIndex + (if (isForward) 1 else -1)
+            var nextIndex = active.selectedIndex + 1
 
             if (nextIndex > listSize - 1) {
                 nextIndex = 0
-            } else if (nextIndex < 0) {
-                nextIndex = listSize - 1
             }
 
             active.selectedIndex = nextIndex
             mCurrentCandidateIndex = nextIndex
-            mService?.requestChooseCandidate(mCurrentCandidateIndex)
+            uiBridge?.requestChooseCandidate(mCurrentCandidateIndex)
             updateFloatingCandidates()
             updateComposingText()
             return
@@ -561,57 +555,80 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         if (candidateList.isEmpty()) {
             return
         }
-        val nextIndex = mCurrentCandidateIndex + (if (isForward) 1 else -1)
+        val nextIndex = mCurrentCandidateIndex + 1
 
         val listSize = candidateList.size
         if (nextIndex > listSize - 1) {
             mCurrentCandidateIndex = 0
-            mService?.requestChooseCandidate(mCurrentCandidateIndex)
+            uiBridge?.requestChooseCandidate(mCurrentCandidateIndex)
             updateFloatingCandidates()
             updateComposingText()
             return
-        } else if (nextIndex < 0) {
+        }
+        mCurrentCandidateIndex = nextIndex
+        uiBridge?.requestChooseCandidate(mCurrentCandidateIndex)
+        updateFloatingCandidates()
+        updateComposingText()
+    }
+
+    fun choosePrevCandidate() {
+        if (segmentManager.hasSegments()) {
+            val active = segmentManager.getActiveSegment()
+            if (active == null || active.candidates.isEmpty()) return
+            val listSize = active.candidates.size
+            var nextIndex = active.selectedIndex - 1
+
+            if (nextIndex < 0) {
+                nextIndex = listSize - 1
+            }
+
+            active.selectedIndex = nextIndex
+            mCurrentCandidateIndex = nextIndex
+            uiBridge?.requestChooseCandidate(mCurrentCandidateIndex)
+            updateFloatingCandidates()
+            updateComposingText()
+            return
+        }
+
+        if (candidateList.isEmpty()) {
+            return
+        }
+        val nextIndex = mCurrentCandidateIndex - 1
+
+        if (nextIndex < 0) {
             changeState(InputStateComposing.INSTANCE)
             updateSuggestions()
             updateComposingText()
 
-            mCurrentCandidateIndex = 0
+            mCurrentCandidateIndex = -1
+            mCurrentSuggestionIndex = -1
             return
         }
         mCurrentCandidateIndex = nextIndex
-        mService?.requestChooseCandidate(mCurrentCandidateIndex)
+        uiBridge?.requestChooseCandidate(mCurrentCandidateIndex)
         updateFloatingCandidates()
         updateComposingText()
     }
 
     fun pickCandidateViewManually(index: Int) {
-        if (state.isConverting()) {
-            if (segmentManager.hasSegments()) {
-                setCandidateIndex(index)
+        state.processPickCandidate(this, index)
+    }
+
+    fun pickIdleCandidate(index: Int) {
+        if (index in candidateList.indices) {
+            val c = candidateList[index]
+            val candStr = c.candidate ?: ""
+            commitTextInternal(candStr, 1)
+
+            val key = composingBuffer.getSearchQuery()
+            val raw = c.rawCandidate
+            if (candidateLearner != null && mEnableLearning && raw != null && !c.isZenz()) {
+                lastCommittedCandidate = candidateLearner.learnCandidateEntries(c, key.ifEmpty { candStr }, raw, lastCommittedCandidate)
             } else {
-                pickCandidate(index)
-                updateComposingText()
-            }
-        } else if (state == InputStateComposing.INSTANCE) {
-            pickComposingCandidate(index)
-            updateComposingText()
-        } else if (state == InputStateIdle.INSTANCE) {
-            if (index in candidateList.indices) {
-                val c = candidateList[index]
-                val candStr = c.candidate ?: ""
-                commitTextInternal(candStr, 1)
-
-                val key = composingBuffer.getSearchQuery()
-                val raw = c.rawCandidate
-                if (mEnableLearning && raw != null && !c.isZenz()) {
-                    if (mDictionary != null) {
-                        learnCandidateEntries(mDictionary, c, key.ifEmpty { candStr }, raw)
-                    }
-                }
-
                 lastCommittedCandidate = candStr
-                updateIdlePredictions()
             }
+
+            updateIdlePredictions()
         }
     }
 
@@ -626,15 +643,13 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
         commitTextInternal(finalCandidate, 1)
 
-        if (mDictionary != null) {
+        val raw = c.rawCandidate
+        if (candidateLearner != null && mEnableLearning && !c.isZenz() && raw != null) {
             val key = composingBuffer.getSearchQuery()
-            val raw = c.rawCandidate
-            if (mEnableLearning && !c.isZenz() && raw != null) {
-                learnCandidateEntries(mDictionary, c, key, raw)
-            }
+            lastCommittedCandidate = candidateLearner.learnCandidateEntries(c, key, raw, lastCommittedCandidate)
+        } else {
+            lastCommittedCandidate = finalCandidate.toString()
         }
-
-        lastCommittedCandidate = finalCandidate.toString()
 
         clearBuffers()
         changeState(InputStateIdle.INSTANCE)
@@ -663,8 +678,20 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
             cands.add(c)
         }
         candidateList = cands
-        mCurrentCandidateIndex = 0
-        updateCandidates()
+        mCurrentCandidateIndex = -1
+        mCurrentSuggestionIndex = -1
+        val sugStrList = ArrayList<String>()
+        for (c in cands) {
+            sugStrList.add(c.candidate ?: "")
+        }
+        suggestionList = sugStrList
+        if (!composingBuffer.hasComposing()) {
+            uiBridge?.hideCandidatesView()
+            uiBridge?.hideFloatingCandidates()
+        } else {
+            uiBridge?.setCandidateObjects(candidateList, false)
+            updateFloatingCandidates()
+        }
     }
 
     fun hasComposing(): Boolean = composingBuffer.hasComposing()
@@ -745,101 +772,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
     fun updateComposingText() {
         val ct = SpannableStringBuilder()
-
-        if (state.isConverting()) {
-            val targetStart = ct.length
-            if (segmentManager.hasSegments()) {
-                val segments = segmentManager.segments ?: emptyList()
-                val focusedIdx = segmentManager.focusedSegmentIndex
-                val activeSeg = segmentManager.getActiveSegment()
-                val activeCand = activeSeg?.getSelectedCandidate()
-
-                if (activeCand != null && activeCand.isZenz()) {
-                    val segStart = ct.length
-                    ct.append(convertText(activeCand.candidate ?: ""))
-                    val segEnd = ct.length
-                    ct.setSpan(BackgroundColorSpan(mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING)
-                } else {
-                    for (i in segments.indices) {
-                        val seg = segments[i]
-                        val segStart = ct.length
-                        ct.append(convertText(seg.getSelectedSurface()))
-                        val segEnd = ct.length
-                        if (i == focusedIdx) {
-                            ct.setSpan(BackgroundColorSpan(mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING)
-                        } else {
-                            ct.setSpan(BackgroundColorSpan(mColorComposing), segStart, segEnd, Spanned.SPAN_COMPOSING)
-                        }
-                    }
-                }
-            } else {
-                val stateText = state.getComposingText(this)
-                if (stateText != null) {
-                    ct.append(stateText)
-                }
-                val converterText = composingBuffer.romajiBuffer
-                ct.append(converterText)
-                val targetEnd = ct.length
-                ct.setSpan(BackgroundColorSpan(mColorConverting), targetStart, targetEnd, Spanned.SPAN_COMPOSING)
-            }
-
-            val remainingText = composingBuffer.getRemainingComposingText()
-            if (remainingText != null) {
-                val remStart = ct.length
-                ct.append(convertText(remainingText))
-                val remEnd = ct.length
-                ct.setSpan(BackgroundColorSpan(mColorComposing), remStart, remEnd, Spanned.SPAN_COMPOSING)
-            }
-        } else if (state.isTransient()) {
-            if (state == InputStateComposing.INSTANCE) {
-                var cursor = getComposingCursor()
-                val convertedComposing = convertText(composingBuffer.composingText)
-                val composingStr = convertedComposing.toString()
-                cursor = max(0, min(composingStr.length, cursor))
-
-                val firstPart = composingStr.substring(0, cursor)
-                val secondPart = composingStr.substring(cursor)
-                val converterText = composingBuffer.romajiBuffer
-
-                val isPartial = (cursor < composingStr.length)
-
-                val symStart = ct.length
-                ct.append(firstPart)
-                ct.append(converterText)
-                val targetEnd = ct.length
-
-                val nonTargetStart = ct.length
-                ct.append(secondPart)
-                val nonTargetEnd = ct.length
-
-                if (isPartial) {
-                    ct.setSpan(BackgroundColorSpan(mColorConverting), symStart, targetEnd, Spanned.SPAN_COMPOSING)
-                    if (nonTargetStart < nonTargetEnd) {
-                        ct.setSpan(BackgroundColorSpan(mColorComposing), nonTargetStart, nonTargetEnd, Spanned.SPAN_COMPOSING)
-                    }
-                } else {
-                    ct.setSpan(BackgroundColorSpan(mColorComposing), symStart, ct.length, Spanned.SPAN_COMPOSING)
-                }
-            } else {
-                val bgStart = ct.length
-                val stateText = state.getComposingText(this)
-                if (stateText != null) {
-                    ct.append(stateText)
-                }
-                val converterText = composingBuffer.romajiBuffer
-                ct.append(converterText)
-                val bgEnd = ct.length
-                ct.setSpan(BackgroundColorSpan(mColorComposing), bgStart, bgEnd, Spanned.SPAN_COMPOSING)
-            }
-        } else {
-            val converterText = composingBuffer.romajiBuffer
-            if (converterText.isNotEmpty()) {
-                val bgStart = ct.length
-                ct.append(converterText)
-                val bgEnd = ct.length
-                ct.setSpan(BackgroundColorSpan(mColorComposing), bgStart, bgEnd, Spanned.SPAN_COMPOSING)
-            }
-        }
+        state.formatComposingText(this, ct)
 
         val totalLen = ct.length
         if (totalLen != 0) {
@@ -852,6 +785,9 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun conversionStart() {
+        suggestionProvider.cancelPending()
+        zenzEngine?.cancelPendingRequests()
+
         composingBuffer.splitComposingAtCursorIfNeeded()
 
         val success = conversionStartInternal(false)
@@ -864,68 +800,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun getSegmentCandidates(segmentReading: String, preferredSurface: String?): List<Candidate> {
-        val rawCands = ArrayList<Candidate>()
-
-        if (mViterbiDecoder != null) {
-            try {
-                val viterbiCands = mViterbiDecoder?.decode(segmentReading, null)
-                if (viterbiCands != null) {
-                    rawCands.addAll(viterbiCands)
-                }
-            } catch (e: Exception) {
-                Log.e("InputEngine", "Viterbi decode error for segment: $segmentReading", e)
-            }
-        }
-
-        if (mDictionary != null) {
-            val dictCands = mDictionary.findCandidates(segmentReading)
-            if (dictCands != null) {
-                rawCands.addAll(dictCands)
-            }
-        }
-
-        val seen = HashSet<String>()
-        val convertedCands = ArrayList<Candidate>()
-        val plainCands = ArrayList<Candidate>()
-
-        if (!preferredSurface.isNullEmpty()) {
-            val prefSurf = preferredSurface!!
-            seen.add(prefSurf)
-            var prefCand: Candidate? = null
-            for (c in rawCands) {
-                if (prefSurf == c.candidate) {
-                    prefCand = c
-                    break
-                }
-            }
-            if (prefCand == null) {
-                prefCand = Candidate(prefSurf, prefSurf, "Zenz AI")
-            }
-            if (isPlainReadingCandidate(segmentReading, prefSurf)) {
-                plainCands.add(prefCand)
-            } else {
-                convertedCands.add(prefCand)
-            }
-        }
-
-        for (c in rawCands) {
-            val candStr = c.candidate
-            if (!candStr.isNullEmpty()) {
-                if (seen.add(getCandidateDisplayKey(c))) {
-                    if (isPlainReadingCandidate(segmentReading, candStr)) {
-                        plainCands.add(c)
-                    } else {
-                        convertedCands.add(c)
-                    }
-                }
-            }
-        }
-
-        val merged = ArrayList<Candidate>()
-        merged.addAll(convertedCands)
-        merged.addAll(plainCands)
-
-        return merged
+        return viterbiEngine.convertSync(segmentReading, preferredSurface)
     }
 
     fun syncActiveSegment() {
@@ -980,7 +855,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         val query = composingBuffer.getSearchQuery()
 
         val segments = ArrayList<Segment>()
-        if (mViterbiDecoder != null) {
+        if (viterbiEngine.isEnabled && mViterbiDecoder != null) {
             try {
                 val viterbiCands = mViterbiDecoder?.decode(query, null)
                 if (!viterbiCands.isNullOrEmpty() && viterbiCands[0].viterbiPathNode != null) {
@@ -1032,6 +907,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
 
         changeState(InputStateConverting.INSTANCE)
         syncActiveSegment()
+        Log.d("InputEngine", "[Viterbi Candidates Set to CandidateList (Converting)] activeSegmentReading=\"${segmentManager.getActiveSegment()?.reading}\", activeCandidateCount=${candidateList.size}, candidates=${candidateList.map { it.candidate }}")
 
         if (isZenzActive() && !hasUnconvertedAlphabet(query)) {
             val leftContext = getCleanLeftContext(20)
@@ -1043,7 +919,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                     Log.i("InputEngine", "<== [Zenz Response Received (Converting)] candidate=\"$candStr\" (type=${zenzCandidate.type}, query=\"$query\")")
                     if (state.isConverting() && candStr.isNotEmpty()) {
                         val activeSeg = segmentManager.getActiveSegment()
-                        if (activeSeg != null && activeSeg.reading == query) {
+                        if (activeSeg != null) {
                             var exists = false
                             for (c in activeSeg.candidates) {
                                 if (c.candidate == candStr) {
@@ -1055,7 +931,10 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                                 val newCands = activeSeg.candidates.toMutableList()
                                 newCands.add(zenzCandidate)
                                 activeSeg.candidates = newCands
+                                Log.d("InputEngine", "[Zenz Candidate Added to CandidateList (Converting)] candidate=\"$candStr\", newCandidateCount=${newCands.size}, candidates=${newCands.map { it.candidate }}")
                                 syncActiveSegment()
+                            } else {
+                                Log.d("InputEngine", "[Zenz Candidate Already Exists in CandidateList (Converting)] candidate=\"$candStr\"")
                             }
                         }
                     }
@@ -1082,39 +961,12 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         } else if (suggestionList.isNotEmpty()) {
             mCurrentSuggestionIndex
         } else {
-            0
+            -1
         }
     }
 
     fun setCandidateIndex(index: Int) {
-        if (state.isConverting()) {
-            if (segmentManager.hasSegments()) {
-                val active = segmentManager.getActiveSegment()
-                if (active != null && index in active.candidates.indices) {
-                    active.selectedIndex = index
-                    mCurrentCandidateIndex = index
-                    mService?.requestChooseCandidate(mCurrentCandidateIndex)
-                    updateFloatingCandidates()
-                    updateComposingText()
-                }
-                return
-            }
-            if (candidateList.isNotEmpty()) {
-                if (index in candidateList.indices) {
-                    mCurrentCandidateIndex = index
-                    mService?.requestChooseCandidate(mCurrentCandidateIndex)
-                    updateFloatingCandidates()
-                    updateComposingText()
-                }
-            }
-        } else if (suggestionList.isNotEmpty()) {
-            if (index in suggestionList.indices) {
-                mCurrentSuggestionIndex = index
-                mService?.requestChooseCandidate(mCurrentSuggestionIndex)
-                updateFloatingCandidates()
-                updateComposingText()
-            }
-        }
+        state.processSetCandidateIndex(this, index)
     }
 
     private fun getCandidateDisplayKey(c: Candidate): String {
@@ -1138,46 +990,44 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun updateFloatingCandidates() {
-        val service = mService ?: return
+        val bridge = uiBridge ?: return
 
-        if (!service.isFloatingCandidateEnabled()) {
-            service.hideFloatingCandidates()
+        if (!bridge.isFloatingCandidateEnabled()) {
+            bridge.hideFloatingCandidates()
             return
         }
 
         if (state.isConverting() && candidateList.isNotEmpty()) {
             val items = getAllCandidateItems(candidateList)
-            service.showCandidateFlexboxPopup(null, items, mCurrentCandidateIndex)
-        } else if (suggestionList.isNotEmpty()) {
+            bridge.showCandidateFlexboxPopup(null, items, mCurrentCandidateIndex)
+        } else if (composingBuffer.hasComposing() && suggestionList.isNotEmpty()) {
             val items = getAllSuggestionItems(suggestionList)
-            service.showCandidateFlexboxPopup(null, items, mCurrentSuggestionIndex)
-        } else if (!composingBuffer.hasComposing()) {
-            service.hideFloatingCandidates()
+            bridge.showCandidateFlexboxPopup(null, items, mCurrentSuggestionIndex)
+        } else {
+            bridge.hideFloatingCandidates()
         }
     }
 
     private fun updateCandidates() {
-        mService?.setCandidateObjects(candidateList, true)
+        uiBridge?.setCandidateObjects(candidateList, true)
         updateFloatingCandidates()
     }
 
     fun updateSuggestions() {
-        if (!composingBuffer.hasComposing()) {
-            mSuggestionRequestId.incrementAndGet()
-            mDictExecutorQueue.clear()
-            suggestionList = emptyList()
-            candidateList = emptyList()
-            mService?.hideCandidatesView()
-            mService?.hideFloatingCandidates()
+        if (!composingBuffer.hasComposing() || state.isConverting()) {
+            suggestionProvider.cancelPending()
+            if (!state.isConverting()) {
+                suggestionList = emptyList()
+                candidateList = emptyList()
+                uiBridge?.hideCandidatesView()
+                uiBridge?.hideFloatingCandidates()
+            }
             return
         }
 
         val query = composingBuffer.getComposingTextString()
         val romaji = composingBuffer.getRomajiString()
         val displayQuery = if (query.isNotEmpty()) query else romaji
-
-        val requestId = mSuggestionRequestId.incrementAndGet()
-        mDictExecutorQueue.clear()
 
         if (displayQuery.isNotEmpty()) {
             val initialCands = ArrayList<Candidate>()
@@ -1198,160 +1048,78 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
                 initialSugList.add(c.candidate ?: "")
             }
             suggestionList = initialSugList
-            mCurrentCandidateIndex = 0
+            mCurrentCandidateIndex = -1
+            mCurrentSuggestionIndex = -1
 
-            mService?.setCandidateObjects(candidateList, false)
+            uiBridge?.setCandidateObjects(candidateList, false)
             updateFloatingCandidates()
         }
 
-        mDictExecutor.execute {
-            if (requestId != mSuggestionRequestId.get()) return@execute
-            if (query.isEmpty()) return@execute
-
-            val rawCandidates = ArrayList<Candidate>()
-
-            if (mViterbiDecoder != null) {
-                try {
-                    val viterbiCands = mViterbiDecoder?.decode(query, null)
-                    if (viterbiCands != null) {
-                        rawCandidates.addAll(viterbiCands)
-                    }
-                } catch (e: Exception) {
-                    Log.e("InputEngine", "Viterbi decode error", e)
+        suggestionProvider.requestSuggestions(
+            query,
+            mViterbiDecoder,
+            mDictionary,
+            lastCommittedCandidate
+        ) { requestId, currentQuery, merged ->
+            if (requestId == suggestionProvider.suggestionRequestId.get() && composingBuffer.hasComposing() && !state.isConverting()) {
+                candidateList = merged.ifEmpty {
+                    val fallbackQuery = composingBuffer.getComposingTextString().ifEmpty { composingBuffer.getRomajiString() }
+                    listOf(Candidate(fallbackQuery, fallbackQuery, "Zenz AI"))
                 }
-            }
+                mCurrentCandidateIndex = -1
+                mCurrentSuggestionIndex = -1
 
-            if (requestId != mSuggestionRequestId.get()) return@execute
-
-            if (mDictionary != null) {
-                val dictCands = mDictionary.findCandidates(query)
-                if (dictCands != null) {
-                    rawCandidates.addAll(dictCands)
+                val sugStrList = ArrayList<String>()
+                for (c in candidateList) {
+                    sugStrList.add(c.candidate ?: "")
                 }
+                suggestionList = sugStrList
 
-                val suggestionKeys = mDictionary.findSuggestions(query)
-                if (suggestionKeys != null) {
-                    for (key in suggestionKeys) {
-                        if (requestId != mSuggestionRequestId.get()) return@execute
-                        if (!key.isNullOrEmpty() && key != query) {
-                            val keyCand = Candidate(key, key, "Zenz AI").setType(Candidate.Type.SUGGESTION)
-                            rawCandidates.add(keyCand)
+                uiBridge?.setCandidateObjects(candidateList, false)
+                updateFloatingCandidates()
+                Log.d("InputEngine", "[Viterbi/Dict Suggest Candidates Set] query=\"$currentQuery\", count=${candidateList.size}, candidates=${candidateList.map { it.candidate }}")
 
-                            val keyCands = mDictionary.findCandidates(key)
-                            if (keyCands != null) {
-                                for (c in keyCands) {
-                                    val sugCand = Candidate(c.rawCandidate, c.candidate, "Zenz AI")
-                                        .setType(Candidate.Type.SUGGESTION)
-                                    sugCand.setEntry(c.entry)
-                                    rawCandidates.add(sugCand)
+                if (isZenzActive() && !hasUnconvertedAlphabet(currentQuery)) {
+                    val leftContext = getCleanLeftContext(20)
+                    Log.i("InputEngine", "==> [Zenz Live Suggest Request Sent] query=\"$currentQuery\", leftContext=\"$leftContext\"")
+
+                    zenzEngine?.convertAsync(currentQuery, leftContext, object : ZenzEngine.ConversionCallback {
+                        override fun onCandidateAvailable(zenzCandidate: Candidate) {
+                            val candStr = zenzCandidate.candidate ?: ""
+                            Log.i("InputEngine", "<== [Zenz Live Suggest Response Received] candidate=\"$candStr\" (type=${zenzCandidate.type}, query=\"$currentQuery\")")
+                            if (requestId == suggestionProvider.suggestionRequestId.get() && composingBuffer.getComposingTextString() == currentQuery && !state.isConverting() && candStr.isNotEmpty()) {
+                                var exists = false
+                                for (c in candidateList) {
+                                    if (c.candidate == candStr) {
+                                        exists = true
+                                        break
+                                    }
+                                }
+                                if (!exists) {
+                                    val updatedList = ArrayList(candidateList)
+                                    updatedList.add(zenzCandidate)
+                                    candidateList = updatedList
+
+                                    val sugStrList = ArrayList<String>()
+                                    for (c in updatedList) {
+                                        sugStrList.add(c.candidate ?: "")
+                                    }
+                                    suggestionList = sugStrList
+
+                                    Log.d("InputEngine", "[Zenz Live Suggest Candidate Added] candidate=\"$candStr\", newCandidateCount=${updatedList.size}, candidates=${updatedList.map { it.candidate }}")
+
+                                    uiBridge?.setCandidateObjects(candidateList, false)
+                                    updateFloatingCandidates()
+                                } else {
+                                    Log.d("InputEngine", "[Zenz Live Suggest Candidate Already Exists] candidate=\"$candStr\"")
                                 }
                             }
                         }
-                    }
-                }
-            }
 
-            if (requestId != mSuggestionRequestId.get()) return@execute
-
-            val predictedSurfaces = HashSet<String>()
-            val lastCand = lastCommittedCandidate
-            if (mDictionary != null && lastCand != null) {
-                val predicted = mDictionary.getPredictedSurfaceWords(lastCand, 50)
-                if (predicted != null) {
-                    predictedSurfaces.addAll(predicted)
-                }
-            }
-
-            if (requestId != mSuggestionRequestId.get()) return@execute
-
-            val seen = HashSet<String>()
-            val predictionList = ArrayList<Candidate>()
-            val otherList = ArrayList<Candidate>()
-            val suggestionListCands = ArrayList<Candidate>()
-
-            for (c in rawCandidates) {
-                val candStr = c.candidate
-                if (!candStr.isNullEmpty()) {
-                    val key = getCandidateDisplayKey(c)
-                    if (seen.add(key)) {
-                        if (predictedSurfaces.contains(candStr)) {
-                            if (c.type == Candidate.Type.SYSTEM) {
-                                c.type = Candidate.Type.PREDICTION
-                            }
-                            predictionList.add(c)
-                        } else if (c.isSuggestion()) {
-                            suggestionListCands.add(c)
-                        } else {
-                            otherList.add(c)
+                        override fun onConversionComplete() {
+                            Log.i("InputEngine", "<== [Zenz Live Suggest Request Completed] query=\"$currentQuery\"")
                         }
-                    }
-                }
-            }
-
-            val merged = ArrayList<Candidate>()
-            merged.addAll(predictionList)
-            merged.addAll(otherList)
-            merged.addAll(suggestionListCands)
-
-            if (requestId != mSuggestionRequestId.get()) return@execute
-
-            mMainHandler.post {
-                if (requestId == mSuggestionRequestId.get() && composingBuffer.hasComposing()) {
-                    candidateList = merged.ifEmpty {
-                        val fallbackQuery = composingBuffer.getComposingTextString().ifEmpty { composingBuffer.getRomajiString() }
-                        listOf(Candidate(fallbackQuery, fallbackQuery, "Zenz AI"))
-                    }
-                    mCurrentCandidateIndex = 0
-
-                    val sugStrList = ArrayList<String>()
-                    for (c in candidateList) {
-                        sugStrList.add(c.candidate ?: "")
-                    }
-                    suggestionList = sugStrList
-                    suggestionList = sugStrList
-
-                    mService?.setCandidateObjects(candidateList, false)
-                    updateFloatingCandidates()
-
-                    if (isZenzActive() && !hasUnconvertedAlphabet(query)) {
-                        val currentQuery = query
-                        val leftContext = getCleanLeftContext(20)
-                        Log.i("InputEngine", "==> [Zenz Live Suggest Request Sent] query=\"$currentQuery\", leftContext=\"$leftContext\"")
-
-                        zenzEngine?.convertAsync(currentQuery, leftContext, object : ZenzEngine.ConversionCallback {
-                            override fun onCandidateAvailable(zenzCandidate: Candidate) {
-                                val candStr = zenzCandidate.candidate ?: ""
-                                Log.i("InputEngine", "<== [Zenz Live Suggest Response Received] candidate=\"$candStr\" (type=${zenzCandidate.type}, query=\"$currentQuery\")")
-                                if (composingBuffer.getComposingTextString() == currentQuery && candStr.isNotEmpty()) {
-                                    var exists = false
-                                    for (c in candidateList) {
-                                        if (c.candidate == candStr) {
-                                            exists = true
-                                            break
-                                        }
-                                    }
-                                    if (!exists) {
-                                        val updatedList = ArrayList(candidateList)
-                                        updatedList.add(zenzCandidate)
-                                        candidateList = updatedList
-
-                                        val sugStrList = ArrayList<String>()
-                                        for (c in updatedList) {
-                                            sugStrList.add(c.candidate ?: "")
-                                        }
-                                        suggestionList = sugStrList
-
-                                        mService?.setCandidateObjects(candidateList, false)
-                                        updateFloatingCandidates()
-                                    }
-                                }
-                            }
-
-                            override fun onConversionComplete() {
-                                Log.i("InputEngine", "<== [Zenz Live Suggest Request Completed] query=\"$currentQuery\"")
-                            }
-                        })
-                    }
+                    })
                 }
             }
         }
@@ -1372,20 +1140,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         return false
     }
 
-    private fun isPlainReadingCandidate(query: String?, candStr: String?): Boolean {
-        if (candStr.isNullEmpty() || query.isNullEmpty()) {
-            return false
-        }
-        if (candStr == query) {
-            return true
-        }
-        val wideK = RomajiConverter.toWideKatakana(query)
-        if (candStr == wideK) {
-            return true
-        }
-        val halfK = RomajiConverter.toHalfKatakana(query)
-        return candStr == halfK
-    }
+
 
     fun getCurrentCandidate(): String {
         if (candidateList.isEmpty()) {
@@ -1396,12 +1151,13 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     }
 
     fun getCleanLeftContext(maxLen: Int): String {
-        if (zenzEngine == null || !zenzEngine.isUseContext) {
+        val engine = zenzEngine
+        if (engine == null || !engine.isUseContext) {
             return ""
         }
-        val service = mService ?: return ""
-        val fullLeftContext = service.getTextBeforeCursor(maxLen)
-        if (fullLeftContext.isNullEmpty()) {
+        val bridge = uiBridge ?: return ""
+        val fullLeftContext = ContextExtractor.getCleanLeftContext(bridge, maxLen)
+        if (fullLeftContext.isEmpty()) {
             return ""
         }
 
@@ -1465,43 +1221,10 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
             val finalCandidate = mode.convertText(fullSurface.toString())
             commitTextInternal(finalCandidate, 1)
 
-            if (mDictionary != null) {
-                if (mEnableLearning) {
-                    for (seg in segments) {
-                        val selected = seg.getSelectedCandidate()
-                        val raw = selected?.rawCandidate
-                        if (selected != null && !selected.isSuggestion() && !selected.isPrediction() && !selected.isZenz() && raw != null) {
-                            logI("Learning segment: key=${seg.reading}, cand=$raw")
-                            mDictionary.addEntry(seg.reading, raw, selected.getPosId(), selected.getCost())
-                        }
-                    }
-                }
-
-                if (surfaces.isNotEmpty()) {
-                    if (mEnableLearning) {
-                        val lastCand = lastCommittedCandidate
-                        var prevKey = if (lastCand.isNullOrBlank() || isPunctuation(lastCand)) "__BOS__" else lastCand
-                        var prevReading: String? = null
-                        var prevPosId: Int? = null
-
-                        for (i in segments.indices) {
-                            val seg = segments[i]
-                            val selected = seg.getSelectedCandidate()
-                            val surf = seg.getSelectedSurface()
-                            if (surf.isNotEmpty()) {
-                                val reading = selected?.entry?.reading ?: seg.reading
-                                val posId = selected?.getPosId()
-                                val cost = selected?.getCost()
-                                
-                                mDictionary.learnTransition(prevKey, surf, prevReading, prevPosId, reading, posId, cost)
-                                
-                                prevKey = surf
-                                prevReading = reading
-                                prevPosId = posId
-                            }
-                        }
-                    }
-                    lastCommittedCandidate = surfaces[surfaces.size - 1]
+            if (candidateLearner != null && mEnableLearning) {
+                val lastSurf = candidateLearner.learnSegments(segments, lastCommittedCandidate)
+                if (lastSurf != null) {
+                    lastCommittedCandidate = lastSurf
                 } else {
                     lastCommittedCandidate = finalCandidate.toString()
                 }
@@ -1541,16 +1264,13 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         val key = composingBuffer.getSearchQuery()
 
         val raw = c.rawCandidate
-        if (mEnableLearning && !c.isZenz() && raw != null) {
+        if (candidateLearner != null && mEnableLearning && !c.isZenz() && raw != null) {
             logI("Learning: key=$key, cand=$raw")
-            if (mDictionary != null) {
-                learnCandidateEntries(mDictionary, c, key, raw)
-            }
+            lastCommittedCandidate = candidateLearner.learnCandidateEntries(c, key, raw, lastCommittedCandidate)
         } else {
             logI("Skip learning: enable=$mEnableLearning, suggestion/prediction/zenz=${c.isSuggestion() || c.isPrediction() || c.isZenz()}, raw=${raw != null}")
+            lastCommittedCandidate = finalCandidate.toString()
         }
-
-        lastCommittedCandidate = finalCandidate.toString()
 
         if (composingBuffer.getRemainingComposingText() != null) {
             composingBuffer.restoreRemainingComposingText()
@@ -1558,46 +1278,6 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         } else {
             changeState(InputStateIdle.INSTANCE)
         }
-    }
-
-    private fun learnCandidateEntries(dictionary: Dictionary, c: Candidate, defaultKey: String, defaultRaw: String) {
-        val pathNode = c.viterbiPathNode
-        if (pathNode != null) {
-            var curr: ViterbiDecoder.PathNode? = pathNode
-            val words = ArrayList<ViterbiDecoder.PathNode>()
-            while (curr != null && curr.prev != null) {
-                if (!curr.reading.isNullOrEmpty() && !curr.surface.isNullOrEmpty()) {
-                    words.add(0, curr)
-                }
-                curr = curr.prev
-            }
-            if (words.isNotEmpty()) {
-                var prevSurface = lastCommittedCandidate
-
-                for (i in words.indices) {
-                    val w = words[i]
-                    dictionary.addEntry(w.reading!!, w.surface!!, w.posId, w.cost)
-                    if (i == 0) {
-                        val pKey = if (prevSurface.isNullOrBlank() || isPunctuation(prevSurface)) "__BOS__" else prevSurface
-                        dictionary.learnTransition(pKey, w.surface, null, null, w.reading, w.posId, w.cost)
-                    } else {
-                        val prevW = words[i - 1]
-                        dictionary.learnTransition(prevW.surface, w.surface, prevW.reading, prevW.posId, w.reading, w.posId, w.cost)
-                    }
-                    prevSurface = w.surface
-                }
-                if (prevSurface != null) {
-                    lastCommittedCandidate = prevSurface
-                }
-                return
-            }
-        }
-        val candStr = c.candidate ?: defaultRaw
-        val lastCand = lastCommittedCandidate
-        val pKey = if (lastCand.isNullOrBlank() || isPunctuation(lastCand)) "__BOS__" else lastCand
-        dictionary.learnTransition(pKey, candStr, null, null, c.entry?.reading, c.getPosId(), c.getCost())
-        dictionary.addEntry(defaultKey, defaultRaw, c.getPosId(), c.getCost())
-        lastCommittedCandidate = candStr
     }
 
     private fun isPunctuation(text: String?): Boolean {
@@ -1631,28 +1311,37 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
         }
     }
 
+    fun cancelPendingRequests() {
+        viterbiEngine.cancelPending()
+        zenzEngine?.cancelPending()
+    }
+
+    fun release() {
+        viterbiEngine.release()
+        zenzEngine?.release()
+    }
+
     fun reset() {
-        zenzEngine?.cancelPendingRequests()
+        cancelPendingRequests()
         lastCommittedCandidate = null
         clearBuffers()
     }
 
     fun clearBuffers() {
-        zenzEngine?.cancelPendingRequests()
+        cancelPendingRequests()
         composingBuffer.clearAll()
         clearCandidates()
     }
 
     fun clearCandidates() {
-        mSuggestionRequestId.incrementAndGet()
-        mDictExecutorQueue.clear()
+        suggestionProvider.cancelPending()
         segmentManager.clear()
         candidateList = emptyList()
         suggestionList = emptyList()
-        mCurrentCandidateIndex = 0
-        mCurrentSuggestionIndex = 0
-        mService?.hideCandidatesView()
-        mService?.hideFloatingCandidates()
+        mCurrentCandidateIndex = -1
+        mCurrentSuggestionIndex = -1
+        uiBridge?.hideCandidatesView()
+        uiBridge?.hideFloatingCandidates()
     }
 
     fun changeMode(mode: InputMode, finish: Boolean = false) {
@@ -1677,7 +1366,7 @@ class InputEngine(val context: Context?, private val mDictionary: Dictionary?) {
     fun useJisx0201Kana(): Boolean = mUseJisx0201Kana
 
     private fun updateUI() {
-        mService?.requestUIUpdate()
+        uiBridge?.requestUIUpdate()
     }
 
     private fun String?.isNullEmpty(): Boolean = this.isNullOrEmpty()

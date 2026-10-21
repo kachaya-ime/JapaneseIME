@@ -1,4 +1,4 @@
-package io.github.kachaya.ime.engine
+package io.github.kachaya.ime.viterbi
 
 import android.content.Context
 import android.util.Log
@@ -6,7 +6,6 @@ import io.github.kachaya.ime.BuildConfig
 import io.github.kachaya.ime.dictionary.Candidate
 import io.github.kachaya.ime.dictionary.Dictionary
 import io.github.kachaya.ime.dictionary.WordEntry
-import java.util.Collections
 
 /**
  * ViterbiアルゴリズムとN-best探索を用いて、読み（かな文字列）から最適な文節・文の変換候補を生成するデコーダークラスです。

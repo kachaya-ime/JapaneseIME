@@ -22,7 +22,13 @@ enum class InputAction(val id: String, val label: String) {
     DELETE_CHAR("delete_char", "1文字削除"),
     COMPLETION("completion", "補完"),
     OPEN_EMOJI("open_emoji", "絵文字ピッカーを開く"),
-    INSERT_NEWLINE("insert_newline", "送信せずに改行 (Shift+Enter)");
+    INSERT_NEWLINE("insert_newline", "送信せずに改行 (Shift+Enter)"),
+    COMMIT("commit", "確定"),
+    CONVERT("convert", "変換"),
+    NEXT_CANDIDATE("next_candidate", "次候補選択"),
+    PREV_CANDIDATE("prev_candidate", "前候補選択"),
+    TOGGLE_EXPAND_CANDIDATES("toggle_expand_candidates", "候補一覧の展開 / 格納"),
+    RECONVERT("reconvert", "再変換");
 
     companion object {
         /**

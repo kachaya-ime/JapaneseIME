@@ -19,6 +19,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
 import com.google.android.material.snackbar.Snackbar
 import io.github.kachaya.ime.dictionary.Dictionary
+import io.github.kachaya.ime.dictionary.DictionaryManager
 import io.github.kachaya.ime.dictionary.LearningDictionary
 import java.io.BufferedWriter
 import java.io.OutputStreamWriter
@@ -50,8 +51,7 @@ class LearningDictionaryTool : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_dictionary_tool)
-        val dict = Dictionary(this)
-        mDictionary = dict
+        mDictionary = DictionaryManager.getDictionary(this)
 
         supportActionBar?.apply {
             title = "学習辞書ツール"
@@ -76,7 +76,6 @@ class LearningDictionaryTool : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        mDictionary?.close()
         super.onDestroy()
     }
 
@@ -224,7 +223,7 @@ class LearningDictionaryTool : AppCompatActivity() {
             .setTitle("学習辞書のクリア")
             .setMessage("学習辞書のすべての単語を削除しますか？\n（インポートした追加辞書は保持されます）")
             .setPositiveButton("はい、削除します") { _, _ ->
-                mDictionary?.clearLearningDictionary()
+                DictionaryManager.getInstance(this).clearAllUserDictionaries()
                 Snackbar.make(findViewById(R.id.list_view), "学習辞書をクリアしました", Snackbar.LENGTH_SHORT).show()
                 refreshList()
             }

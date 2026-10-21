@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
 import com.google.android.material.snackbar.Snackbar
 import io.github.kachaya.ime.dictionary.Dictionary
+import io.github.kachaya.ime.dictionary.DictionaryManager
 import io.github.kachaya.ime.dictionary.PredictionDictionary
 
 /**
@@ -30,8 +31,9 @@ class PredictionDictionaryTool : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_prediction_dictionary_tool)
-        mPredictionDictionary = PredictionDictionary(this)
-        mDictionary = Dictionary(this)
+        val manager = DictionaryManager.getInstance(this)
+        mDictionary = manager.dictionary
+        mPredictionDictionary = manager.dictionary.predictionDictionary
 
         supportActionBar?.apply {
             title = "予測辞書ツール"
@@ -56,8 +58,6 @@ class PredictionDictionaryTool : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        mPredictionDictionary?.close()
-        mDictionary?.close()
         super.onDestroy()
     }
 

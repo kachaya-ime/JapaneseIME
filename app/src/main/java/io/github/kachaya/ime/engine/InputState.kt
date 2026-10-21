@@ -1,6 +1,11 @@
 package io.github.kachaya.ime.engine
 
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
 import android.view.KeyEvent
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * 「入力状態」の振る舞いを定義するインターフェースです。
@@ -38,10 +43,14 @@ interface InputState {
     fun finish(context: InputEngine): Boolean
     fun toggleKana(context: InputEngine)
     fun getComposingText(context: InputEngine): CharSequence?
+
+    fun processPickCandidate(context: InputEngine, index: Int): Boolean
+    fun processSetCandidateIndex(context: InputEngine, index: Int)
+    fun formatComposingText(context: InputEngine, builder: SpannableStringBuilder)
 }
 
 /**
- * 未確定入力状態（Composing / ▽）を管理するクラスです。
+ * 未確定入力状態（Composing）を管理するクラスです。
  */
 enum class InputStateComposing : InputState {
     INSTANCE;
@@ -107,8 +116,44 @@ enum class InputStateComposing : InputState {
             }
             InputAction.FORWARD_DELETE -> return context.deleteComposingCharAfterCursor()
             InputAction.KILL_LINE -> return context.killComposingToLineEnd()
-            InputAction.CURSOR_UP,
-            InputAction.CURSOR_DOWN -> return true
+            InputAction.COMMIT -> {
+                return processEnter(context)
+            }
+            InputAction.CONVERT -> {
+                return processSpace(context, false)
+            }
+            InputAction.NEXT_CANDIDATE -> {
+                if (context.suggestionList.isNullOrEmpty()) {
+                    context.updateSuggestions()
+                } else {
+                    context.chooseAdjacentSuggestion(true)
+                }
+                return true
+            }
+            InputAction.PREV_CANDIDATE -> {
+                if (context.suggestionList.isNullOrEmpty()) {
+                    context.updateSuggestions()
+                } else {
+                    context.chooseAdjacentSuggestion(false)
+                }
+                return true
+            }
+            InputAction.TOGGLE_EXPAND_CANDIDATES -> {
+                context.toggleExpandCandidates()
+                return true
+            }
+            InputAction.CURSOR_UP -> {
+                if (context.suggestionList.isNotEmpty()) {
+                    context.chooseAdjacentSuggestion(false)
+                }
+                return true
+            }
+            InputAction.CURSOR_DOWN -> {
+                if (context.suggestionList.isNotEmpty()) {
+                    context.chooseAdjacentSuggestion(true)
+                }
+                return true
+            }
             else -> {}
         }
         return false
@@ -124,13 +169,31 @@ enum class InputStateComposing : InputState {
     }
 
     override fun processEnter(context: InputEngine): Boolean {
+        val selectedIdx = context.getCurrentCandidateIndex()
+        if (selectedIdx in context.candidateList.indices) {
+            context.pickComposingCandidate(selectedIdx)
+            return true
+        }
         finish(context)
         context.changeState(InputStateIdle.INSTANCE)
         return true
     }
 
-    override fun processDpadUp(context: InputEngine, isShifted: Boolean): Boolean = true
-    override fun processDpadDown(context: InputEngine, isShifted: Boolean): Boolean = true
+    override fun processDpadUp(context: InputEngine, isShifted: Boolean): Boolean {
+        if (context.suggestionList.isNotEmpty()) {
+            context.chooseAdjacentSuggestion(false)
+            return true
+        }
+        return true
+    }
+
+    override fun processDpadDown(context: InputEngine, isShifted: Boolean): Boolean {
+        if (context.suggestionList.isNotEmpty()) {
+            context.chooseAdjacentSuggestion(true)
+            return true
+        }
+        return true
+    }
 
     override fun processDpadLeft(context: InputEngine, isShifted: Boolean): Boolean {
         context.moveComposingCursor(-1)
@@ -214,6 +277,54 @@ enum class InputStateComposing : InputState {
         val composingText = context.getComposingText()
         return context.convertText(composingText)
     }
+
+    override fun processPickCandidate(context: InputEngine, index: Int): Boolean {
+        context.pickComposingCandidate(index)
+        context.updateComposingText()
+        return true
+    }
+
+    override fun processSetCandidateIndex(context: InputEngine, index: Int) {
+        if (context.suggestionList.isNotEmpty()) {
+            if (index == -1 || index in context.suggestionList.indices) {
+                context.mCurrentSuggestionIndex = index
+                context.mService?.requestChooseCandidate(context.mCurrentSuggestionIndex)
+                context.updateFloatingCandidates()
+                context.updateComposingText()
+            }
+        }
+    }
+
+    override fun formatComposingText(context: InputEngine, builder: SpannableStringBuilder) {
+        var cursor = context.getComposingCursor()
+        val convertedComposing = context.convertText(context.composingBuffer.composingText)
+        val composingStr = convertedComposing.toString()
+        cursor = max(0, min(composingStr.length, cursor))
+
+        val firstPart = composingStr.substring(0, cursor)
+        val secondPart = composingStr.substring(cursor)
+        val converterText = context.composingBuffer.romajiBuffer
+
+        val isPartial = (cursor < composingStr.length)
+
+        val symStart = builder.length
+        builder.append(firstPart)
+        builder.append(converterText)
+        val targetEnd = builder.length
+
+        val nonTargetStart = builder.length
+        builder.append(secondPart)
+        val nonTargetEnd = builder.length
+
+        if (isPartial) {
+            builder.setSpan(BackgroundColorSpan(context.mColorConverting), symStart, targetEnd, Spanned.SPAN_COMPOSING)
+            if (nonTargetStart < nonTargetEnd) {
+                builder.setSpan(BackgroundColorSpan(context.mColorComposing), nonTargetStart, nonTargetEnd, Spanned.SPAN_COMPOSING)
+            }
+        } else {
+            builder.setSpan(BackgroundColorSpan(context.mColorComposing), symStart, builder.length, Spanned.SPAN_COMPOSING)
+        }
+    }
 }
 
 /**
@@ -242,6 +353,24 @@ enum class InputStateConverting : InputState {
 
     override fun processInputAction(context: InputEngine, action: InputAction): Boolean {
         when (action) {
+            InputAction.COMMIT -> {
+                return processEnter(context)
+            }
+            InputAction.CONVERT -> {
+                return processSpace(context, false)
+            }
+            InputAction.NEXT_CANDIDATE -> {
+                context.chooseNextCandidate()
+                return true
+            }
+            InputAction.PREV_CANDIDATE -> {
+                context.choosePrevCandidate()
+                return true
+            }
+            InputAction.TOGGLE_EXPAND_CANDIDATES -> {
+                context.toggleExpandCandidates()
+                return true
+            }
             InputAction.CURSOR_DOWN -> {
                 context.chooseNextCandidate()
                 return true
@@ -326,6 +455,9 @@ enum class InputStateConverting : InputState {
     }
 
     override fun processDpadLeft(context: InputEngine, isShifted: Boolean): Boolean {
+        if (isShifted && context.resizeFocusedSegment(-1)) {
+            return true
+        }
         if (!context.focusPrevSegment()) {
             context.choosePrevCandidate()
         }
@@ -333,6 +465,9 @@ enum class InputStateConverting : InputState {
     }
 
     override fun processDpadRight(context: InputEngine, isShifted: Boolean): Boolean {
+        if (isShifted && context.resizeFocusedSegment(1)) {
+            return true
+        }
         if (!context.focusNextSegment()) {
             context.chooseNextCandidate()
         }
@@ -389,6 +524,82 @@ enum class InputStateConverting : InputState {
         val candidate = context.getCurrentCandidate()
         return context.convertText(candidate)
     }
+
+    override fun processPickCandidate(context: InputEngine, index: Int): Boolean {
+        if (context.segmentManager.hasSegments()) {
+            context.setCandidateIndex(index)
+        } else {
+            context.pickCandidate(index)
+            context.updateComposingText()
+        }
+        return true
+    }
+
+    override fun processSetCandidateIndex(context: InputEngine, index: Int) {
+        if (context.segmentManager.hasSegments()) {
+            val active = context.segmentManager.getActiveSegment()
+            if (active != null && index in active.candidates.indices) {
+                active.selectedIndex = index
+                context.mCurrentCandidateIndex = index
+                context.mService?.requestChooseCandidate(context.mCurrentCandidateIndex)
+                context.updateFloatingCandidates()
+                context.updateComposingText()
+            }
+            return
+        }
+        if (context.candidateList.isNotEmpty()) {
+            if (index in context.candidateList.indices) {
+                context.mCurrentCandidateIndex = index
+                context.mService?.requestChooseCandidate(context.mCurrentCandidateIndex)
+                context.updateFloatingCandidates()
+                context.updateComposingText()
+            }
+        }
+    }
+
+    override fun formatComposingText(context: InputEngine, builder: SpannableStringBuilder) {
+        val targetStart = builder.length
+        if (context.segmentManager.hasSegments()) {
+            val segments = context.segmentManager.segments ?: emptyList()
+            val focusedIdx = context.segmentManager.focusedSegmentIndex
+            val activeSeg = context.segmentManager.getActiveSegment()
+            val activeCand = activeSeg?.getSelectedCandidate()
+
+            if (activeCand != null && activeCand.isZenz()) {
+                val segStart = builder.length
+                builder.append(context.convertText(activeCand.candidate ?: ""))
+                val segEnd = builder.length
+                builder.setSpan(BackgroundColorSpan(context.mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING)
+            } else {
+                for (i in segments.indices) {
+                    val seg = segments[i]
+                    val segStart = builder.length
+                    builder.append(context.convertText(seg.getSelectedSurface()))
+                    val segEnd = builder.length
+                    if (i == focusedIdx) {
+                        builder.setSpan(BackgroundColorSpan(context.mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING)
+                    } else {
+                        builder.setSpan(BackgroundColorSpan(context.mColorComposing), segStart, segEnd, Spanned.SPAN_COMPOSING)
+                    }
+                }
+            }
+        } else {
+            val stateText = getComposingText(context)
+            builder.append(stateText)
+            val converterText = context.composingBuffer.romajiBuffer
+            builder.append(converterText)
+            val targetEnd = builder.length
+            builder.setSpan(BackgroundColorSpan(context.mColorConverting), targetStart, targetEnd, Spanned.SPAN_COMPOSING)
+        }
+
+        val remainingText = context.composingBuffer.getRemainingComposingText()
+        if (remainingText != null) {
+            val remStart = builder.length
+            builder.append(context.convertText(remainingText))
+            val remEnd = builder.length
+            builder.setSpan(BackgroundColorSpan(context.mColorComposing), remStart, remEnd, Spanned.SPAN_COMPOSING)
+        }
+    }
 }
 
 /**
@@ -405,6 +616,35 @@ enum class InputStateIdle : InputState {
 
     override fun processInputAction(context: InputEngine, action: InputAction): Boolean {
         when (action) {
+            InputAction.COMMIT -> {
+                return processEnter(context)
+            }
+            InputAction.CONVERT -> {
+                return processSpace(context, false)
+            }
+            InputAction.NEXT_CANDIDATE -> {
+                if (context.candidateList.isNotEmpty()) {
+                    context.chooseNextCandidate()
+                    return true
+                }
+            }
+            InputAction.PREV_CANDIDATE -> {
+                if (context.candidateList.isNotEmpty()) {
+                    context.choosePrevCandidate()
+                    return true
+                }
+            }
+            InputAction.TOGGLE_EXPAND_CANDIDATES -> {
+                context.toggleExpandCandidates()
+                return true
+            }
+            InputAction.RECONVERT -> {
+                val lastCand = context.lastCommittedCandidate
+                if (!lastCand.isNullOrEmpty()) {
+                    context.mService?.prepareReConversion(lastCand)
+                    return true
+                }
+            }
             InputAction.KANA_KEY -> {
                 context.handleKanaKey()
                 return true
@@ -496,4 +736,21 @@ enum class InputStateIdle : InputState {
     }
 
     override fun getComposingText(context: InputEngine): CharSequence? = null
+
+    override fun processPickCandidate(context: InputEngine, index: Int): Boolean {
+        context.pickIdleCandidate(index)
+        return true
+    }
+
+    override fun processSetCandidateIndex(context: InputEngine, index: Int) {}
+
+    override fun formatComposingText(context: InputEngine, builder: SpannableStringBuilder) {
+        val converterText = context.composingBuffer.romajiBuffer
+        if (converterText.isNotEmpty()) {
+            val bgStart = builder.length
+            builder.append(converterText)
+            val bgEnd = builder.length
+            builder.setSpan(BackgroundColorSpan(context.mColorComposing), bgStart, bgEnd, Spanned.SPAN_COMPOSING)
+        }
+    }
 }

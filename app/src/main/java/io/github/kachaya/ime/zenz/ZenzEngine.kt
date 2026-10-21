@@ -6,11 +6,11 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import io.github.kachaya.ime.dictionary.Candidate
+import io.github.kachaya.ime.engine.ConversionEngine
 import io.github.kachaya.ime.engine.RomajiConverter
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.LinkedBlockingQueue
@@ -21,7 +21,9 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * llama.cpp と Zenz v3 (かな漢字変換LLM) を統合する変換エンジンクラスです。
  */
-class ZenzEngine(private val mContext: Context?) {
+class ZenzEngine(private val mContext: Context?) : ConversionEngine {
+
+    override val name: String = "Zenz AI"
 
     private val mExecutorQueue = LinkedBlockingQueue<Runnable>()
     private val mExecutor: ThreadPoolExecutor = ThreadPoolExecutor(
@@ -62,8 +64,6 @@ class ZenzEngine(private val mContext: Context?) {
     private external fun nativeTokenToPiece(token: Int): ByteArray?
     private external fun nativeGetEosToken(): Int
 
-
-
     /**
      * 変換結果を受け取るための非同期コールバックインターフェースです。
      */
@@ -79,7 +79,7 @@ class ZenzEngine(private val mContext: Context?) {
         fun onConversionComplete()
     }
 
-    val isEnabled: Boolean
+    override val isEnabled: Boolean
         get() = mEnabled && isLoaded()
 
     fun isLoaded(): Boolean {
@@ -298,6 +298,29 @@ class ZenzEngine(private val mContext: Context?) {
 
     fun formatPrompt(reading: String, contextLeft: String?): String {
         return if (isUseContext) formatZenzV3Prompt(reading, contextLeft, "") else formatZenzV3Prompt(reading, "", "")
+    }
+
+    override fun convertSync(query: String, preferredSurface: String?): List<Candidate> {
+        return emptyList()
+    }
+
+    override fun convertAsync(
+        query: String,
+        leftContext: String?,
+        callback: ConversionEngine.AsyncCallback
+    ) {
+        if (!isEnabled || query.isEmpty()) return
+        convertAsync(query, leftContext, object : ConversionCallback {
+            override fun onCandidateAvailable(candidate: Candidate) {
+                callback.onCandidateAvailable(candidate)
+            }
+
+            override fun onConversionComplete() {}
+        })
+    }
+
+    override fun cancelPending() {
+        cancelPendingRequests()
     }
 
     /**
@@ -545,7 +568,7 @@ class ZenzEngine(private val mContext: Context?) {
 
                 if (addedSurfaces.add(surfaceResult)) {
                     val zenzCandidate = Candidate(reading, surfaceResult, "Zenz AI")
-                        .setType(Candidate.Type.SYSTEM)
+                        .setType(Candidate.Type.ZENZ)
 
                     if (!isCancelled(requestId)) {
                         callback?.let { mMainHandler.post { it.onCandidateAvailable(zenzCandidate) } }
@@ -565,7 +588,7 @@ class ZenzEngine(private val mContext: Context?) {
         }
     }
 
-    fun release() {
+    override fun release() {
         if (sLibraryLoaded) {
             try {
                 if (nativeIsLoaded()) {
@@ -621,10 +644,6 @@ class ZenzEngine(private val mContext: Context?) {
                 sLibraryLoaded = false
             }
         }
-
-
-
-
 
         @JvmStatic
         fun prepareModelFileFromAssets(context: Context?, assetFileName: String?): String? {

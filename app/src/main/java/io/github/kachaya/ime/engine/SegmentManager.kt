@@ -2,6 +2,7 @@ package io.github.kachaya.ime.engine
 
 import android.util.Log
 import io.github.kachaya.ime.dictionary.Candidate
+import io.github.kachaya.ime.viterbi.ViterbiDecoder
 
 /**
  * 複数文節変換における文節リスト、注目文節のフォーカス位置、および文節の伸縮処理を管理するクラスです。

@@ -35,6 +35,7 @@ import androidx.preference.PreferenceManager
 import io.github.kachaya.ime.SettingsActivity.PrefKeys
 import io.github.kachaya.ime.dictionary.Candidate
 import io.github.kachaya.ime.dictionary.Dictionary
+import io.github.kachaya.ime.dictionary.DictionaryManager
 import io.github.kachaya.ime.engine.InputEngine
 import io.github.kachaya.ime.engine.InputModeFullHiragana
 import io.github.kachaya.ime.engine.InputModeFullKatakana
@@ -123,9 +124,9 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
 
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         mPrefs = prefs
-        val dict = Dictionary(this)
-        mDictionary = dict
-        mEngine = InputEngine(this, dict)
+        val manager = DictionaryManager.getInstance(this)
+        mDictionary = manager.dictionary
+        mEngine = InputEngine(this, manager.dictionary)
 
         readPrefs()
         prefs.registerOnSharedPreferenceChangeListener(this)
@@ -278,8 +279,8 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
     override fun onDestroy() {
         logI("onDestroy()")
         mPrefs?.unregisterOnSharedPreferenceChangeListener(this)
-        mDictionary?.close()
-        mEngine?.zenzEngine?.release()
+        DictionaryManager.getInstance(this).close()
+        mEngine?.release()
         super.onDestroy()
     }
 
@@ -523,7 +524,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
 
         updateStatusIcon()
 
-        mDictionary?.reloadLearningDictionary()
+        DictionaryManager.getInstance(this).reloadLearningDictionary()
         mEngine?.readPrefs()
         mInputView?.readPrefs()
     }
@@ -896,7 +897,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
         return prefs.getBoolean(key, defaultVal)
     }
 
-    fun setCandidates(list: List<String>?, selectFirst: Boolean = true) {
+    fun setCandidates(list: List<String>?, selectFirst: Boolean = false) {
         val view = mInputView
         if (view != null) {
             if (list != null && !isFloatingCandidateEnabled()) {
@@ -927,7 +928,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
         }
     }
 
-    fun setCandidateObjects(candidates: List<Candidate>?, selectFirst: Boolean = true) {
+    fun setCandidateObjects(candidates: List<Candidate>?, selectFirst: Boolean = false) {
         val view = mInputView
         if (view != null) {
             if (candidates != null && !isFloatingCandidateEnabled()) {
@@ -949,6 +950,10 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
 
     fun pickCandidateViewManually(index: Int) {
         mEngine?.pickCandidateViewManually(index)
+    }
+
+    fun toggleExpandCandidates() {
+        mInputView?.toggleExpanded()
     }
 
     fun getTextBeforeCursor(maxChars: Int): String {

@@ -24,7 +24,89 @@ interface InputMode {
      * @param action  割り当てられている InputAction
      * @return イベントを消費した場合は true
      */
-    fun processInputAction(context: InputEngine, action: InputAction): Boolean
+    fun processInputAction(context: InputEngine, action: InputAction): Boolean {
+        when (action) {
+            InputAction.COMMIT -> {
+                if (context.hasComposing()) {
+                    context.handleEnter()
+                    return true
+                }
+                return false
+            }
+            InputAction.CONVERT -> {
+                if (context.hasComposing()) {
+                    context.handleSpace()
+                    return true
+                }
+                return false
+            }
+            InputAction.TOGGLE_EXPAND_CANDIDATES -> {
+                context.toggleExpandCandidates()
+                return true
+            }
+            InputAction.KANA_KEY -> {
+                context.handleKanaKey()
+                return true
+            }
+            InputAction.TOGGLE_EN_JP -> {
+                context.toggleEnglishJapanese()
+                return true
+            }
+            InputAction.LAUNCH_SETTINGS -> {
+                context.launchSettings()
+                return true
+            }
+            InputAction.OPEN_EMOJI -> {
+                context.openEmojiPicker()
+                return true
+            }
+            InputAction.INSERT_NEWLINE -> {
+                if (context.hasComposing()) {
+                    context.handleEnter()
+                }
+                context.sendShiftEnter()
+                return true
+            }
+            InputAction.CURSOR_UP -> {
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_UP)
+                return true
+            }
+            InputAction.CURSOR_DOWN -> {
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_DOWN)
+                return true
+            }
+            InputAction.CURSOR_LEFT -> {
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT)
+                return true
+            }
+            InputAction.CURSOR_RIGHT -> {
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_RIGHT)
+                return true
+            }
+            InputAction.FORWARD_DELETE -> {
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_FORWARD_DEL)
+                return true
+            }
+            InputAction.DELETE_CHAR -> {
+                if (!context.handleBackspace()) {
+                    context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                }
+                return true
+            }
+            InputAction.LINE_START -> {
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_HOME)
+                return true
+            }
+            InputAction.LINE_END -> {
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_END)
+                return true
+            }
+            InputAction.KILL_LINE -> return context.handleKillLine()
+            InputAction.KILL_LINE_BACKWARD -> return context.handleKillLineBackward()
+            else -> {}
+        }
+        return false
+    }
 
     /**
      * 与えられたテキストを、現在のモードの性質に合わせて最終変換（半角化、全角化等）します。
@@ -53,72 +135,6 @@ enum class InputModeFullHiragana : InputMode {
         context.processRomaji(code)
     }
 
-    override fun processInputAction(context: InputEngine, action: InputAction): Boolean {
-        when (action) {
-            InputAction.KANA_KEY -> {
-                context.handleKanaKey()
-                return true
-            }
-            InputAction.TOGGLE_EN_JP -> {
-                context.toggleEnglishJapanese()
-                return true
-            }
-            InputAction.LAUNCH_SETTINGS -> {
-                context.launchSettings()
-                return true
-            }
-            InputAction.OPEN_EMOJI -> {
-                context.openEmojiPicker()
-                return true
-            }
-            InputAction.INSERT_NEWLINE -> {
-                if (context.hasComposing()) {
-                    context.handleEnter()
-                }
-                context.sendShiftEnter()
-                return true
-            }
-            InputAction.CURSOR_UP -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_UP)
-                return true
-            }
-            InputAction.CURSOR_DOWN -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_DOWN)
-                return true
-            }
-            InputAction.CURSOR_LEFT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT)
-                return true
-            }
-            InputAction.CURSOR_RIGHT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_RIGHT)
-                return true
-            }
-            InputAction.FORWARD_DELETE -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_FORWARD_DEL)
-                return true
-            }
-            InputAction.DELETE_CHAR -> {
-                if (!context.handleBackspace()) {
-                    context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
-                }
-                return true
-            }
-            InputAction.LINE_START -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_HOME)
-                return true
-            }
-            InputAction.LINE_END -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_END)
-                return true
-            }
-            InputAction.KILL_LINE -> return context.handleKillLine()
-            InputAction.KILL_LINE_BACKWARD -> return context.handleKillLineBackward()
-            else -> {}
-        }
-        return false
-    }
-
     override fun convertText(text: CharSequence): CharSequence {
         return text
     }
@@ -136,72 +152,6 @@ enum class InputModeFullKatakana : InputMode {
 
     override fun processKey(context: InputEngine, code: Int) {
         context.processRomaji(code)
-    }
-
-    override fun processInputAction(context: InputEngine, action: InputAction): Boolean {
-        when (action) {
-            InputAction.KANA_KEY -> {
-                context.handleKanaKey()
-                return true
-            }
-            InputAction.TOGGLE_EN_JP -> {
-                context.toggleEnglishJapanese()
-                return true
-            }
-            InputAction.LAUNCH_SETTINGS -> {
-                context.launchSettings()
-                return true
-            }
-            InputAction.OPEN_EMOJI -> {
-                context.openEmojiPicker()
-                return true
-            }
-            InputAction.INSERT_NEWLINE -> {
-                if (context.hasComposing()) {
-                    context.handleEnter()
-                }
-                context.sendShiftEnter()
-                return true
-            }
-            InputAction.CURSOR_UP -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_UP)
-                return true
-            }
-            InputAction.CURSOR_DOWN -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_DOWN)
-                return true
-            }
-            InputAction.CURSOR_LEFT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT)
-                return true
-            }
-            InputAction.CURSOR_RIGHT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_RIGHT)
-                return true
-            }
-            InputAction.FORWARD_DELETE -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_FORWARD_DEL)
-                return true
-            }
-            InputAction.DELETE_CHAR -> {
-                if (!context.handleBackspace()) {
-                    context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
-                }
-                return true
-            }
-            InputAction.LINE_START -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_HOME)
-                return true
-            }
-            InputAction.LINE_END -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_END)
-                return true
-            }
-            InputAction.KILL_LINE -> return context.handleKillLine()
-            InputAction.KILL_LINE_BACKWARD -> return context.handleKillLineBackward()
-            else -> {}
-        }
-        return false
     }
 
     override fun convertText(text: CharSequence): CharSequence {
@@ -225,73 +175,7 @@ enum class InputModeFullLatin : InputMode {
 
     override fun processKey(context: InputEngine, code: Int) {
         val text = String(Character.toChars(code))
-        context.commitTextInternal(convertText(text), 1)
-    }
-
-    override fun processInputAction(context: InputEngine, action: InputAction): Boolean {
-        when (action) {
-            InputAction.KANA_KEY -> {
-                context.handleKanaKey()
-                return true
-            }
-            InputAction.TOGGLE_EN_JP -> {
-                context.toggleEnglishJapanese()
-                return true
-            }
-            InputAction.LAUNCH_SETTINGS -> {
-                context.launchSettings()
-                return true
-            }
-            InputAction.OPEN_EMOJI -> {
-                context.openEmojiPicker()
-                return true
-            }
-            InputAction.INSERT_NEWLINE -> {
-                if (context.hasComposing()) {
-                    context.handleEnter()
-                }
-                context.sendShiftEnter()
-                return true
-            }
-            InputAction.CURSOR_UP -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_UP)
-                return true
-            }
-            InputAction.CURSOR_DOWN -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_DOWN)
-                return true
-            }
-            InputAction.CURSOR_LEFT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT)
-                return true
-            }
-            InputAction.CURSOR_RIGHT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_RIGHT)
-                return true
-            }
-            InputAction.FORWARD_DELETE -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_FORWARD_DEL)
-                return true
-            }
-            InputAction.DELETE_CHAR -> {
-                if (!context.handleBackspace()) {
-                    context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
-                }
-                return true
-            }
-            InputAction.LINE_START -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_HOME)
-                return true
-            }
-            InputAction.LINE_END -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_END)
-                return true
-            }
-            InputAction.KILL_LINE -> return context.handleKillLine()
-            InputAction.KILL_LINE_BACKWARD -> return context.handleKillLineBackward()
-            else -> {}
-        }
-        return false
+        context.processDirectText(text)
     }
 
     override fun convertText(text: CharSequence): CharSequence {
@@ -313,72 +197,6 @@ enum class InputModeHalfKatakana : InputMode {
         context.processRomaji(code)
     }
 
-    override fun processInputAction(context: InputEngine, action: InputAction): Boolean {
-        when (action) {
-            InputAction.KANA_KEY -> {
-                context.handleKanaKey()
-                return true
-            }
-            InputAction.TOGGLE_EN_JP -> {
-                context.toggleEnglishJapanese()
-                return true
-            }
-            InputAction.LAUNCH_SETTINGS -> {
-                context.launchSettings()
-                return true
-            }
-            InputAction.OPEN_EMOJI -> {
-                context.openEmojiPicker()
-                return true
-            }
-            InputAction.INSERT_NEWLINE -> {
-                if (context.hasComposing()) {
-                    context.handleEnter()
-                }
-                context.sendShiftEnter()
-                return true
-            }
-            InputAction.CURSOR_UP -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_UP)
-                return true
-            }
-            InputAction.CURSOR_DOWN -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_DOWN)
-                return true
-            }
-            InputAction.CURSOR_LEFT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT)
-                return true
-            }
-            InputAction.CURSOR_RIGHT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_RIGHT)
-                return true
-            }
-            InputAction.FORWARD_DELETE -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_FORWARD_DEL)
-                return true
-            }
-            InputAction.DELETE_CHAR -> {
-                if (!context.handleBackspace()) {
-                    context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
-                }
-                return true
-            }
-            InputAction.LINE_START -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_HOME)
-                return true
-            }
-            InputAction.LINE_END -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_END)
-                return true
-            }
-            InputAction.KILL_LINE -> return context.handleKillLine()
-            InputAction.KILL_LINE_BACKWARD -> return context.handleKillLineBackward()
-            else -> {}
-        }
-        return false
-    }
-
     override fun convertText(text: CharSequence): CharSequence {
         return RomajiConverter.toHalfKatakana(text)
     }
@@ -396,73 +214,7 @@ enum class InputModeHalfLatin : InputMode {
 
     override fun processKey(context: InputEngine, code: Int) {
         val text = String(Character.toChars(code))
-        context.commitTextInternal(convertText(text), 1)
-    }
-
-    override fun processInputAction(context: InputEngine, action: InputAction): Boolean {
-        when (action) {
-            InputAction.KANA_KEY -> {
-                context.handleKanaKey()
-                return true
-            }
-            InputAction.TOGGLE_EN_JP -> {
-                context.toggleEnglishJapanese()
-                return true
-            }
-            InputAction.LAUNCH_SETTINGS -> {
-                context.launchSettings()
-                return true
-            }
-            InputAction.OPEN_EMOJI -> {
-                context.openEmojiPicker()
-                return true
-            }
-            InputAction.INSERT_NEWLINE -> {
-                if (context.hasComposing()) {
-                    context.handleEnter()
-                }
-                context.sendShiftEnter()
-                return true
-            }
-            InputAction.CURSOR_UP -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_UP)
-                return true
-            }
-            InputAction.CURSOR_DOWN -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_DOWN)
-                return true
-            }
-            InputAction.CURSOR_LEFT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT)
-                return true
-            }
-            InputAction.CURSOR_RIGHT -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_RIGHT)
-                return true
-            }
-            InputAction.FORWARD_DELETE -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_FORWARD_DEL)
-                return true
-            }
-            InputAction.DELETE_CHAR -> {
-                if (!context.handleBackspace()) {
-                    context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
-                }
-                return true
-            }
-            InputAction.LINE_START -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_HOME)
-                return true
-            }
-            InputAction.LINE_END -> {
-                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_END)
-                return true
-            }
-            InputAction.KILL_LINE -> return context.handleKillLine()
-            InputAction.KILL_LINE_BACKWARD -> return context.handleKillLineBackward()
-            else -> {}
-        }
-        return false
+        context.processDirectText(text)
     }
 
     override fun convertText(text: CharSequence): CharSequence {

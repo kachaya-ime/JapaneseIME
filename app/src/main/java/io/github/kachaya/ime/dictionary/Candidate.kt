@@ -4,7 +4,8 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
-import io.github.kachaya.ime.engine.ViterbiDecoder
+import io.github.kachaya.ime.engine.Segment
+import io.github.kachaya.ime.viterbi.ViterbiDecoder
 
 /**
  * 変換候補1つを表現するデータモデルクラスです。
@@ -178,5 +179,95 @@ class WordEntry(
 
     override fun toString(): String {
         return "$reading $surface"
+    }
+}
+
+/**
+ * 候補確定時の単語学習・N-gram遷移学習ロジックを担当するヘルパークラスです。
+ */
+class CandidateLearner(private val dictionary: Dictionary) {
+
+    fun learnSegments(
+        segments: List<Segment>,
+        lastCommittedCandidate: String?
+    ): String? {
+        var prevKey = if (lastCommittedCandidate.isNullOrBlank() || isPunctuation(lastCommittedCandidate)) "__BOS__" else lastCommittedCandidate
+        var prevReading: String? = null
+        var prevPosId: Int? = null
+        var lastSurf: String? = null
+
+        for (seg in segments) {
+            val selected = seg.getSelectedCandidate()
+            val raw = selected?.rawCandidate
+            if (selected != null && !selected.isSuggestion() && !selected.isPrediction() && !selected.isZenz() && raw != null) {
+                dictionary.addEntry(seg.reading, raw, selected.getPosId(), selected.getCost())
+            }
+
+            val surf = seg.getSelectedSurface()
+            if (surf.isNotEmpty()) {
+                val reading = selected?.entry?.reading ?: seg.reading
+                val posId = selected?.getPosId()
+                val cost = selected?.getCost()
+
+                dictionary.learnTransition(prevKey, surf, prevReading, prevPosId, reading, posId, cost)
+
+                prevKey = surf
+                prevReading = reading
+                prevPosId = posId
+                lastSurf = surf
+            }
+        }
+        return lastSurf
+    }
+
+    fun learnCandidateEntries(
+        c: Candidate,
+        defaultKey: String,
+        defaultRaw: String,
+        lastCommittedCandidate: String?
+    ): String {
+        val pathNode = c.viterbiPathNode
+        if (pathNode != null) {
+            var curr: ViterbiDecoder.PathNode? = pathNode
+            val words = ArrayList<ViterbiDecoder.PathNode>()
+            while (curr != null && curr.prev != null) {
+                if (!curr.reading.isNullOrEmpty() && !curr.surface.isNullOrEmpty()) {
+                    words.add(0, curr)
+                }
+                curr = curr.prev
+            }
+            if (words.isNotEmpty()) {
+                var prevSurface = lastCommittedCandidate
+
+                for (i in words.indices) {
+                    val w = words[i]
+                    dictionary.addEntry(w.reading!!, w.surface!!, w.posId, w.cost)
+                    if (i == 0) {
+                        val pKey = if (prevSurface.isNullOrBlank() || isPunctuation(prevSurface)) "__BOS__" else prevSurface
+                        dictionary.learnTransition(pKey, w.surface, null, null, w.reading, w.posId, w.cost)
+                    } else {
+                        val prevW = words[i - 1]
+                        dictionary.learnTransition(prevW.surface, w.surface, prevW.reading, prevW.posId, w.reading, w.posId, w.cost)
+                    }
+                    prevSurface = w.surface
+                }
+                return prevSurface ?: (c.candidate ?: defaultRaw)
+            }
+        }
+        val candStr = c.candidate ?: defaultRaw
+        val lastCand = lastCommittedCandidate
+        val pKey = if (lastCand.isNullOrBlank() || isPunctuation(lastCand)) "__BOS__" else lastCand
+        dictionary.learnTransition(pKey, candStr, null, null, c.entry?.reading, c.getPosId(), c.getCost())
+        dictionary.addEntry(defaultKey, defaultRaw, c.getPosId(), c.getCost())
+        return candStr
+    }
+
+    companion object {
+        fun isPunctuation(text: String?): Boolean {
+            if (text.isNullOrBlank()) return true
+            val trimmed = text.trim()
+            val lastChar = trimmed.last()
+            return lastChar == '。' || lastChar == '．' || lastChar == '！' || lastChar == '？' || lastChar == '.' || lastChar == '!' || lastChar == '?'
+        }
     }
 }
