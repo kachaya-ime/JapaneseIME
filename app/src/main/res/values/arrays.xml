@@ -133,10 +133,12 @@
     <string-array name="conversion_engine_entries">
         <item>Viterbi (従来エンジン)</item>
         <item>Zenz (LLMエンジン)</item>
+        <item>Jinen (LLMエンジン)</item>
     </string-array>
     <string-array name="conversion_engine_values">
         <item>viterbi</item>
         <item>zenz</item>
+        <item>jinen</item>
     </string-array>
 
 </resources>

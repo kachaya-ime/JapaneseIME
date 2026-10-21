@@ -20,6 +20,7 @@ import io.github.kachaya.ime.SettingsActivity
 import io.github.kachaya.ime.dictionary.Candidate
 import io.github.kachaya.ime.dictionary.CandidateLearner
 import io.github.kachaya.ime.dictionary.Dictionary
+import io.github.kachaya.ime.jinen.JinenEngine
 import io.github.kachaya.ime.viterbi.ViterbiDecoder
 import io.github.kachaya.ime.viterbi.ViterbiEngine
 import io.github.kachaya.ime.zenz.ZenzEngine
@@ -90,6 +91,7 @@ class InputEngine(
 
     val viterbiEngine: ViterbiEngine = ViterbiEngine(mDictionary, mViterbiNBest)
     val zenzEngine: ZenzEngine? = if (context != null) ZenzEngine(context) else null
+    val jinenEngine: JinenEngine? = if (context != null) JinenEngine(context) else null
 
     val mViterbiDecoder: ViterbiDecoder?
         get() = viterbiEngine.viterbiDecoder
@@ -98,6 +100,10 @@ class InputEngine(
 
     fun isZenzActive(): Boolean {
         return zenzEngine != null && zenzEngine.isEnabled
+    }
+
+    fun isJinenActive(): Boolean {
+        return jinenEngine != null && jinenEngine.isEnabled
     }
 
     init {
@@ -161,6 +167,7 @@ class InputEngine(
         mShortcutMap = KeyShortcutManager.loadMappings(prefs)
 
         zenzEngine?.reloadPreferences(prefs)
+        jinenEngine?.reloadPreferences(prefs)
 
     }
 
@@ -944,12 +951,38 @@ class InputEngine(
                     Log.i("InputEngine", "<== [Zenz Request Completed (Converting)] query=\"$query\"")
                 }
             })
-        } else {
-            if (!isZenzActive()) {
-                Log.d("InputEngine", "[Zenz Request Skipped (Converting)] Zenz engine is not active. (query=\"$query\")")
-            } else if (hasUnconvertedAlphabet(query)) {
-                Log.d("InputEngine", "[Zenz Request Skipped (Converting)] Query has unconverted alphabet. (query=\"$query\")")
+        }
+
+        if (isJinenActive() && !hasUnconvertedAlphabet(query)) {
+            val leftContext = getCleanLeftContext(20)
+            Log.i("InputEngine", "==> [Jinen Request Sent (Space Key)] query=\"$query\", leftContext=\"$leftContext\"")
+            jinenEngine?.convertAsync(query, leftContext) { jinenCandidate ->
+                val candStr = jinenCandidate.candidate ?: ""
+                Log.i("InputEngine", "<== [Jinen Response Received (Space Key)] candidate=\"$candStr\" (type=${jinenCandidate.type}, query=\"$query\")")
+                if (state.isConverting() && candStr.isNotEmpty()) {
+                    val activeSeg = segmentManager.getActiveSegment()
+                    if (activeSeg != null) {
+                        var exists = false
+                        for (c in activeSeg.candidates) {
+                            if (c.candidate == candStr) {
+                                exists = true
+                                break
+                            }
+                        }
+                        if (!exists) {
+                            val newCands = activeSeg.candidates.toMutableList()
+                            newCands.add(jinenCandidate)
+                            activeSeg.candidates = newCands
+                            Log.d("InputEngine", "[Jinen Candidate Added to CandidateList (Converting)] candidate=\"$candStr\", newCandidateCount=${newCands.size}, candidates=${newCands.map { it.candidate }}")
+                            syncActiveSegment()
+                        } else {
+                            Log.d("InputEngine", "[Jinen Candidate Already Exists in CandidateList (Converting)] candidate=\"$candStr\"")
+                        }
+                    }
+                }
             }
+        } else if (!isJinenActive()) {
+            Log.d("InputEngine", "[Jinen Request Skipped] Jinen is not active (isJinenActive=${isJinenActive()})")
         }
 
         return true
@@ -1057,8 +1090,8 @@ class InputEngine(
 
         suggestionProvider.requestSuggestions(
             query,
-            mViterbiDecoder,
-            mDictionary,
+            if (viterbiEngine.isEnabled) mViterbiDecoder else null,
+            if (viterbiEngine.isEnabled) mDictionary else null,
             lastCommittedCandidate
         ) { requestId, currentQuery, merged ->
             if (requestId == suggestionProvider.suggestionRequestId.get() && composingBuffer.hasComposing() && !state.isConverting()) {
@@ -1314,11 +1347,13 @@ class InputEngine(
     fun cancelPendingRequests() {
         viterbiEngine.cancelPending()
         zenzEngine?.cancelPending()
+        jinenEngine?.cancelPending()
     }
 
     fun release() {
         viterbiEngine.release()
         zenzEngine?.release()
+        jinenEngine?.release()
     }
 
     fun reset() {

@@ -30,6 +30,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
+### llama.cpp
+
+オンデバイス LLM 推論エンジンとして llama.cpp (MIT License) を使用しています。
+https://github.com/ggerganov/llama.cpp
+
+### Zenz / ensan-hcl 氏
+
+かな漢字変換 LLM 推論エンジンおよび Zenz モデル (`zenz-v3.2-xsmall.gguf`) として ensan-hcl 氏の成果を使用しています。モデルと各種実装の公開に深く感謝いたします。
+- https://github.com/ensan-hcl/llama.cpp
+- https://huggingface.co/ensan-hcl/zenz-v3.2-xsmall-gguf
+
+### Jinen / togatogah 氏
+
+かな漢字変換 LLM 推論エンジンおよび Jinen モデル (`jinen-v2-xsmall-Q5_K_M.gguf`) として togatogah 氏の成果を使用しています。モデルと各種実装の公開に深く感謝いたします。
+- https://huggingface.co/togatogah/jinen-v2-xsmall.gguf
+
 ### SQLite
 
 本ソフトウェアは、辞書エンジンのバックエンドとして SQLite を使用しています。

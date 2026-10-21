@@ -121,4 +121,28 @@
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:title="Jinen LLM 変換サポート"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="jinen_enabled"
+            android:summary="変換結果一覧にJinenを使用した候補を追加します"
+            android:title="変換サポートに Jinen を使用する" />
+
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="jinen_use_context"
+            android:summaryOff="前文のテキストを参照せずに単体で変換します"
+            android:summaryOn="カーソル位置の直前テキストを変換文脈 [Context] として参照します"
+            android:title="左文脈（前文）を参照する" />
+
+        <EditTextPreference
+            android:defaultValue="0.0"
+            android:key="jinen_temperature"
+            android:summary="0.0 (Greedy Decoding / karukan 推奨)"
+            android:title="Temperature (サンプリング温度)" />
+    </PreferenceCategory>
+
 </PreferenceScreen>

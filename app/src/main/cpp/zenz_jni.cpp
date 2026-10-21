@@ -16,6 +16,8 @@
 #include <android/log.h>
 #include "llama.h"
 
+namespace zenz_internal {
+
 /**
  * @brief llama.cpp の内部ログメッセージを Android Logcat (タグ: LlamaCPP) へ転送するコールバック関数です。
  */
@@ -36,7 +38,7 @@ static void zenz_llama_log_callback(enum ggml_log_level level, const char *text,
         android_level = ANDROID_LOG_DEBUG;
     }
 
-    __android_log_print(android_level, "LlamaCPP", "%s", text);
+    __android_log_print(android_level, "LlamaCPP_Zenz", "%s", text);
 }
 
 /**
@@ -49,6 +51,10 @@ struct ZenzContext {
 };
 
 static ZenzContext g_zenz;
+
+} // namespace zenz_internal
+
+using namespace zenz_internal;
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     llama_backend_init();

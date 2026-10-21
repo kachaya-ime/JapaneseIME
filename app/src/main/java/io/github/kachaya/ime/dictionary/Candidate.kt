@@ -21,7 +21,8 @@ class Candidate constructor(
         LEARNING,
         PREDICTION,
         SUGGESTION,
-        ZENZ
+        ZENZ,
+        JINEN
     }
 
     /** 候補の種類・由来。 */
