@@ -145,4 +145,15 @@
             android:title="Temperature (サンプリング温度)" />
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:title="Karukan 変換サポート (Rust IME)"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="karukan_enabled"
+            android:summary="変換結果一覧に Karukan (Rust IME) を使用した候補を追加します"
+            android:title="変換サポートに Karukan を使用する" />
+    </PreferenceCategory>
+
 </PreferenceScreen>

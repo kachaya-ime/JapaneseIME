@@ -21,6 +21,7 @@ import io.github.kachaya.ime.dictionary.Candidate
 import io.github.kachaya.ime.dictionary.CandidateLearner
 import io.github.kachaya.ime.dictionary.Dictionary
 import io.github.kachaya.ime.jinen.JinenEngine
+import io.github.kachaya.ime.karukan.KarukanEngine
 import io.github.kachaya.ime.viterbi.ViterbiDecoder
 import io.github.kachaya.ime.viterbi.ViterbiEngine
 import io.github.kachaya.ime.zenz.ZenzEngine
@@ -92,6 +93,7 @@ class InputEngine(
     val viterbiEngine: ViterbiEngine = ViterbiEngine(mDictionary, mViterbiNBest)
     val zenzEngine: ZenzEngine? = if (context != null) ZenzEngine(context) else null
     val jinenEngine: JinenEngine? = if (context != null) JinenEngine(context) else null
+    val karukanEngine: KarukanEngine? = if (context != null) KarukanEngine(context) else null
 
     val mViterbiDecoder: ViterbiDecoder?
         get() = viterbiEngine.viterbiDecoder
@@ -104,6 +106,10 @@ class InputEngine(
 
     fun isJinenActive(): Boolean {
         return jinenEngine != null && jinenEngine.isEnabled
+    }
+
+    fun isKarukanActive(): Boolean {
+        return karukanEngine != null && karukanEngine.isEnabled
     }
 
     init {
@@ -168,6 +174,8 @@ class InputEngine(
 
         zenzEngine?.reloadPreferences(prefs)
         jinenEngine?.reloadPreferences(prefs)
+        karukanEngine?.isEnabled = prefs.getBoolean("karukan_enabled", false)
+        Log.i("InputEngine", "karukanEngine.isEnabled = ${karukanEngine?.isEnabled}")
 
     }
 
@@ -807,7 +815,16 @@ class InputEngine(
     }
 
     fun getSegmentCandidates(segmentReading: String, preferredSurface: String?): List<Candidate> {
-        return viterbiEngine.convertSync(segmentReading, preferredSurface)
+        val candidates = viterbiEngine.convertSync(segmentReading, preferredSurface).toMutableList()
+        if (karukanEngine?.isEnabled == true) {
+            val karukanCands = karukanEngine.convertSync(segmentReading, preferredSurface)
+            for (c in karukanCands) {
+                if (candidates.none { it.candidate == c.candidate }) {
+                    candidates.add(c)
+                }
+            }
+        }
+        return candidates
     }
 
     fun syncActiveSegment() {
@@ -1348,12 +1365,14 @@ class InputEngine(
         viterbiEngine.cancelPending()
         zenzEngine?.cancelPending()
         jinenEngine?.cancelPending()
+        karukanEngine?.cancelPending()
     }
 
     fun release() {
         viterbiEngine.release()
         zenzEngine?.release()
         jinenEngine?.release()
+        karukanEngine?.release()
     }
 
     fun reset() {
