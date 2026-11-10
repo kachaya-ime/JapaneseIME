@@ -562,25 +562,16 @@ enum class InputStateConverting : InputState {
         if (context.segmentManager.hasSegments()) {
             val segments = context.segmentManager.segments ?: emptyList()
             val focusedIdx = context.segmentManager.focusedSegmentIndex
-            val activeSeg = context.segmentManager.getActiveSegment()
-            val activeCand = activeSeg?.getSelectedCandidate()
 
-            if (activeCand != null && activeCand.isZenz()) {
+            for (i in segments.indices) {
+                val seg = segments[i]
                 val segStart = builder.length
-                builder.append(context.convertText(activeCand.candidate ?: ""))
+                builder.append(context.convertText(seg.getSelectedSurface()))
                 val segEnd = builder.length
-                builder.setSpan(BackgroundColorSpan(context.mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING)
-            } else {
-                for (i in segments.indices) {
-                    val seg = segments[i]
-                    val segStart = builder.length
-                    builder.append(context.convertText(seg.getSelectedSurface()))
-                    val segEnd = builder.length
-                    if (i == focusedIdx) {
-                        builder.setSpan(BackgroundColorSpan(context.mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING)
-                    } else {
-                        builder.setSpan(BackgroundColorSpan(context.mColorComposing), segStart, segEnd, Spanned.SPAN_COMPOSING)
-                    }
+                if (i == focusedIdx) {
+                    builder.setSpan(BackgroundColorSpan(context.mColorConverting), segStart, segEnd, Spanned.SPAN_COMPOSING)
+                } else {
+                    builder.setSpan(BackgroundColorSpan(context.mColorComposing), segStart, segEnd, Spanned.SPAN_COMPOSING)
                 }
             }
         } else {

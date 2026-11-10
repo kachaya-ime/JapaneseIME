@@ -54,7 +54,7 @@ class Dictionary(context: Context?) {
         // Add learning entries first (preserving priority/order)
         for (we in learningWordEntries) {
             if (seenSurfaces.add(we.surface)) {
-                val c = Candidate(we.surface, we.surface, "Zenz AI")
+                val c = Candidate(we.surface, we.surface)
                     .setType(Candidate.Type.LEARNING)
                     .setEntry(we)
                 candidates.add(c)
@@ -64,7 +64,7 @@ class Dictionary(context: Context?) {
         // Add system entries
         for (we in sysWordEntries) {
             if (seenSurfaces.add(we.surface)) {
-                val c = Candidate(we.surface, we.surface, "Zenz AI")
+                val c = Candidate(we.surface, we.surface)
                     .setType(Candidate.Type.SYSTEM)
                     .setEntry(we)
                 candidates.add(c)

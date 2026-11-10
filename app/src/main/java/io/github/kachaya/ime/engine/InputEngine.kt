@@ -20,11 +20,8 @@ import io.github.kachaya.ime.SettingsActivity
 import io.github.kachaya.ime.dictionary.Candidate
 import io.github.kachaya.ime.dictionary.CandidateLearner
 import io.github.kachaya.ime.dictionary.Dictionary
-import io.github.kachaya.ime.jinen.JinenEngine
-import io.github.kachaya.ime.karukan.KarukanEngine
 import io.github.kachaya.ime.viterbi.ViterbiDecoder
 import io.github.kachaya.ime.viterbi.ViterbiEngine
-import io.github.kachaya.ime.zenz.ZenzEngine
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -91,26 +88,11 @@ class InputEngine(
     private var mShortcutMap: Map<Int, InputAction>? = null
 
     val viterbiEngine: ViterbiEngine = ViterbiEngine(mDictionary, mViterbiNBest)
-    val zenzEngine: ZenzEngine? = if (context != null) ZenzEngine(context) else null
-    val jinenEngine: JinenEngine? = if (context != null) JinenEngine(context) else null
-    val karukanEngine: KarukanEngine? = if (context != null) KarukanEngine(context) else null
 
     val mViterbiDecoder: ViterbiDecoder?
         get() = viterbiEngine.viterbiDecoder
 
     val segmentManager: SegmentManager = SegmentManager()
-
-    fun isZenzActive(): Boolean {
-        return zenzEngine != null && zenzEngine.isEnabled
-    }
-
-    fun isJinenActive(): Boolean {
-        return jinenEngine != null && jinenEngine.isEnabled
-    }
-
-    fun isKarukanActive(): Boolean {
-        return karukanEngine != null && karukanEngine.isEnabled
-    }
 
     init {
         mFullWidthSeparatorMap["."] = "。"
@@ -171,12 +153,6 @@ class InputEngine(
         viterbiEngine.updateNBest(mViterbiNBest)
 
         mShortcutMap = KeyShortcutManager.loadMappings(prefs)
-
-        zenzEngine?.reloadPreferences(prefs)
-        jinenEngine?.reloadPreferences(prefs)
-        karukanEngine?.isEnabled = prefs.getBoolean("karukan_enabled", false)
-        Log.i("InputEngine", "karukanEngine.isEnabled = ${karukanEngine?.isEnabled}")
-
     }
 
     fun isComposing(): Boolean = composingBuffer.hasComposing()
@@ -637,7 +613,7 @@ class InputEngine(
 
             val key = composingBuffer.getSearchQuery()
             val raw = c.rawCandidate
-            if (candidateLearner != null && mEnableLearning && raw != null && !c.isZenz()) {
+            if (candidateLearner != null && mEnableLearning && raw != null) {
                 lastCommittedCandidate = candidateLearner.learnCandidateEntries(c, key.ifEmpty { candStr }, raw, lastCommittedCandidate)
             } else {
                 lastCommittedCandidate = candStr
@@ -659,7 +635,7 @@ class InputEngine(
         commitTextInternal(finalCandidate, 1)
 
         val raw = c.rawCandidate
-        if (candidateLearner != null && mEnableLearning && !c.isZenz() && raw != null) {
+        if (candidateLearner != null && mEnableLearning && raw != null) {
             val key = composingBuffer.getSearchQuery()
             lastCommittedCandidate = candidateLearner.learnCandidateEntries(c, key, raw, lastCommittedCandidate)
         } else {
@@ -688,7 +664,7 @@ class InputEngine(
         }
         val cands = ArrayList<Candidate>()
         for (surf in predictedSurfaces) {
-            val c = Candidate(surf, surf, "Zenz AI")
+            val c = Candidate(surf, surf)
             c.type = Candidate.Type.PREDICTION
             cands.add(c)
         }
@@ -801,7 +777,6 @@ class InputEngine(
 
     fun conversionStart() {
         suggestionProvider.cancelPending()
-        zenzEngine?.cancelPendingRequests()
 
         composingBuffer.splitComposingAtCursorIfNeeded()
 
@@ -815,16 +790,7 @@ class InputEngine(
     }
 
     fun getSegmentCandidates(segmentReading: String, preferredSurface: String?): List<Candidate> {
-        val candidates = viterbiEngine.convertSync(segmentReading, preferredSurface).toMutableList()
-        if (karukanEngine?.isEnabled == true) {
-            val karukanCands = karukanEngine.convertSync(segmentReading, preferredSurface)
-            for (c in karukanCands) {
-                if (candidates.none { it.candidate == c.candidate }) {
-                    candidates.add(c)
-                }
-            }
-        }
-        return candidates
+        return viterbiEngine.convertSync(segmentReading, preferredSurface).toMutableList()
     }
 
     fun syncActiveSegment() {
@@ -933,75 +899,6 @@ class InputEngine(
         syncActiveSegment()
         Log.d("InputEngine", "[Viterbi Candidates Set to CandidateList (Converting)] activeSegmentReading=\"${segmentManager.getActiveSegment()?.reading}\", activeCandidateCount=${candidateList.size}, candidates=${candidateList.map { it.candidate }}")
 
-        if (isZenzActive() && !hasUnconvertedAlphabet(query)) {
-            val leftContext = getCleanLeftContext(20)
-            Log.i("InputEngine", "==> [Zenz Request Sent (Converting)] query=\"$query\", leftContext=\"$leftContext\"")
-
-            zenzEngine?.convertAsync(query, leftContext, object : ZenzEngine.ConversionCallback {
-                override fun onCandidateAvailable(zenzCandidate: Candidate) {
-                    val candStr = zenzCandidate.candidate ?: ""
-                    Log.i("InputEngine", "<== [Zenz Response Received (Converting)] candidate=\"$candStr\" (type=${zenzCandidate.type}, query=\"$query\")")
-                    if (state.isConverting() && candStr.isNotEmpty()) {
-                        val activeSeg = segmentManager.getActiveSegment()
-                        if (activeSeg != null) {
-                            var exists = false
-                            for (c in activeSeg.candidates) {
-                                if (c.candidate == candStr) {
-                                    exists = true
-                                    break
-                                }
-                            }
-                            if (!exists) {
-                                val newCands = activeSeg.candidates.toMutableList()
-                                newCands.add(zenzCandidate)
-                                activeSeg.candidates = newCands
-                                Log.d("InputEngine", "[Zenz Candidate Added to CandidateList (Converting)] candidate=\"$candStr\", newCandidateCount=${newCands.size}, candidates=${newCands.map { it.candidate }}")
-                                syncActiveSegment()
-                            } else {
-                                Log.d("InputEngine", "[Zenz Candidate Already Exists in CandidateList (Converting)] candidate=\"$candStr\"")
-                            }
-                        }
-                    }
-                }
-
-                override fun onConversionComplete() {
-                    Log.i("InputEngine", "<== [Zenz Request Completed (Converting)] query=\"$query\"")
-                }
-            })
-        }
-
-        if (isJinenActive() && !hasUnconvertedAlphabet(query)) {
-            val leftContext = getCleanLeftContext(20)
-            Log.i("InputEngine", "==> [Jinen Request Sent (Space Key)] query=\"$query\", leftContext=\"$leftContext\"")
-            jinenEngine?.convertAsync(query, leftContext) { jinenCandidate ->
-                val candStr = jinenCandidate.candidate ?: ""
-                Log.i("InputEngine", "<== [Jinen Response Received (Space Key)] candidate=\"$candStr\" (type=${jinenCandidate.type}, query=\"$query\")")
-                if (state.isConverting() && candStr.isNotEmpty()) {
-                    val activeSeg = segmentManager.getActiveSegment()
-                    if (activeSeg != null) {
-                        var exists = false
-                        for (c in activeSeg.candidates) {
-                            if (c.candidate == candStr) {
-                                exists = true
-                                break
-                            }
-                        }
-                        if (!exists) {
-                            val newCands = activeSeg.candidates.toMutableList()
-                            newCands.add(jinenCandidate)
-                            activeSeg.candidates = newCands
-                            Log.d("InputEngine", "[Jinen Candidate Added to CandidateList (Converting)] candidate=\"$candStr\", newCandidateCount=${newCands.size}, candidates=${newCands.map { it.candidate }}")
-                            syncActiveSegment()
-                        } else {
-                            Log.d("InputEngine", "[Jinen Candidate Already Exists in CandidateList (Converting)] candidate=\"$candStr\"")
-                        }
-                    }
-                }
-            }
-        } else if (!isJinenActive()) {
-            Log.d("InputEngine", "[Jinen Request Skipped] Jinen is not active (isJinenActive=${isJinenActive()})")
-        }
-
         return true
     }
 
@@ -1081,15 +978,15 @@ class InputEngine(
 
         if (displayQuery.isNotEmpty()) {
             val initialCands = ArrayList<Candidate>()
-            initialCands.add(Candidate(displayQuery, displayQuery, "Zenz AI"))
+            initialCands.add(Candidate(displayQuery, displayQuery))
 
             val wideK = RomajiConverter.toWideKatakana(displayQuery)
             val halfK = RomajiConverter.toHalfKatakana(displayQuery)
             if (!wideK.isNullEmpty() && wideK != displayQuery) {
-                initialCands.add(Candidate(wideK, wideK, "Zenz AI"))
+                initialCands.add(Candidate(wideK, wideK))
             }
             if (!halfK.isNullEmpty() && halfK != displayQuery) {
-                initialCands.add(Candidate(halfK, halfK, "Zenz AI"))
+                initialCands.add(Candidate(halfK, halfK))
             }
 
             candidateList = initialCands
@@ -1114,7 +1011,7 @@ class InputEngine(
             if (requestId == suggestionProvider.suggestionRequestId.get() && composingBuffer.hasComposing() && !state.isConverting()) {
                 candidateList = merged.ifEmpty {
                     val fallbackQuery = composingBuffer.getComposingTextString().ifEmpty { composingBuffer.getRomajiString() }
-                    listOf(Candidate(fallbackQuery, fallbackQuery, "Zenz AI"))
+                    listOf(Candidate(fallbackQuery, fallbackQuery))
                 }
                 mCurrentCandidateIndex = -1
                 mCurrentSuggestionIndex = -1
@@ -1128,66 +1025,8 @@ class InputEngine(
                 uiBridge?.setCandidateObjects(candidateList, false)
                 updateFloatingCandidates()
                 Log.d("InputEngine", "[Viterbi/Dict Suggest Candidates Set] query=\"$currentQuery\", count=${candidateList.size}, candidates=${candidateList.map { it.candidate }}")
-
-                if (isZenzActive() && !hasUnconvertedAlphabet(currentQuery)) {
-                    val leftContext = getCleanLeftContext(20)
-                    Log.i("InputEngine", "==> [Zenz Live Suggest Request Sent] query=\"$currentQuery\", leftContext=\"$leftContext\"")
-
-                    zenzEngine?.convertAsync(currentQuery, leftContext, object : ZenzEngine.ConversionCallback {
-                        override fun onCandidateAvailable(zenzCandidate: Candidate) {
-                            val candStr = zenzCandidate.candidate ?: ""
-                            Log.i("InputEngine", "<== [Zenz Live Suggest Response Received] candidate=\"$candStr\" (type=${zenzCandidate.type}, query=\"$currentQuery\")")
-                            if (requestId == suggestionProvider.suggestionRequestId.get() && composingBuffer.getComposingTextString() == currentQuery && !state.isConverting() && candStr.isNotEmpty()) {
-                                var exists = false
-                                for (c in candidateList) {
-                                    if (c.candidate == candStr) {
-                                        exists = true
-                                        break
-                                    }
-                                }
-                                if (!exists) {
-                                    val updatedList = ArrayList(candidateList)
-                                    updatedList.add(zenzCandidate)
-                                    candidateList = updatedList
-
-                                    val sugStrList = ArrayList<String>()
-                                    for (c in updatedList) {
-                                        sugStrList.add(c.candidate ?: "")
-                                    }
-                                    suggestionList = sugStrList
-
-                                    Log.d("InputEngine", "[Zenz Live Suggest Candidate Added] candidate=\"$candStr\", newCandidateCount=${updatedList.size}, candidates=${updatedList.map { it.candidate }}")
-
-                                    uiBridge?.setCandidateObjects(candidateList, false)
-                                    updateFloatingCandidates()
-                                } else {
-                                    Log.d("InputEngine", "[Zenz Live Suggest Candidate Already Exists] candidate=\"$candStr\"")
-                                }
-                            }
-                        }
-
-                        override fun onConversionComplete() {
-                            Log.i("InputEngine", "<== [Zenz Live Suggest Request Completed] query=\"$currentQuery\"")
-                        }
-                    })
-                }
             }
         }
-    }
-
-    private fun hasUnconvertedAlphabet(query: String?): Boolean {
-        if (composingBuffer.hasRomaji()) {
-            return true
-        }
-        if (query != null) {
-            for (i in query.indices) {
-                val c = query[i]
-                if (RomajiConverter.isAlphabet(c.code) || (c in 'Ａ'..'Ｚ') || (c in 'ａ'..'ｚ')) {
-                    return true
-                }
-            }
-        }
-        return false
     }
 
 
@@ -1198,40 +1037,6 @@ class InputEngine(
         }
         val c = candidateList[mCurrentCandidateIndex]
         return c.candidate ?: ""
-    }
-
-    fun getCleanLeftContext(maxLen: Int): String {
-        val engine = zenzEngine
-        if (engine == null || !engine.isUseContext) {
-            return ""
-        }
-        val bridge = uiBridge ?: return ""
-        val fullLeftContext = ContextExtractor.getCleanLeftContext(bridge, maxLen)
-        if (fullLeftContext.isEmpty()) {
-            return ""
-        }
-
-        val composingText = composingBuffer.getComposingTextString()
-        val romajiBuffer = composingBuffer.getRomajiString()
-        val displayComposing = convertText(composingText).toString() + romajiBuffer
-
-        if (displayComposing.isNotEmpty() && fullLeftContext.endsWith(displayComposing)) {
-            return fullLeftContext.substring(0, fullLeftContext.length - displayComposing.length)
-        }
-
-        if (composingText.isNotEmpty() && fullLeftContext.endsWith(composingText)) {
-            return fullLeftContext.substring(0, fullLeftContext.length - composingText.length)
-        }
-
-        var candidateTrim = displayComposing
-        while (candidateTrim.isNotEmpty()) {
-            if (fullLeftContext.endsWith(candidateTrim)) {
-                return fullLeftContext.substring(0, fullLeftContext.length - candidateTrim.length)
-            }
-            candidateTrim = candidateTrim.substring(0, candidateTrim.length - 1)
-        }
-
-        return fullLeftContext
     }
 
     fun pickCurrentCandidate() {
@@ -1253,18 +1058,11 @@ class InputEngine(
             val fullSurface = StringBuilder()
             val surfaces = ArrayList<String>()
 
-            val activeSelected = active?.getSelectedCandidate()
-            if (activeSelected != null && activeSelected.isZenz()) {
-                val cand = activeSelected.candidate ?: ""
-                fullSurface.append(cand)
-                surfaces.add(cand)
-            } else {
-                for (seg in segments) {
-                    val surf = seg.getSelectedSurface()
-                    fullSurface.append(surf)
-                    if (surf.isNotEmpty()) {
-                        surfaces.add(surf)
-                    }
+            for (seg in segments) {
+                val surf = seg.getSelectedSurface()
+                fullSurface.append(surf)
+                if (surf.isNotEmpty()) {
+                    surfaces.add(surf)
                 }
             }
 
@@ -1314,11 +1112,11 @@ class InputEngine(
         val key = composingBuffer.getSearchQuery()
 
         val raw = c.rawCandidate
-        if (candidateLearner != null && mEnableLearning && !c.isZenz() && raw != null) {
+        if (candidateLearner != null && mEnableLearning && raw != null) {
             logI("Learning: key=$key, cand=$raw")
             lastCommittedCandidate = candidateLearner.learnCandidateEntries(c, key, raw, lastCommittedCandidate)
         } else {
-            logI("Skip learning: enable=$mEnableLearning, suggestion/prediction/zenz=${c.isSuggestion() || c.isPrediction() || c.isZenz()}, raw=${raw != null}")
+            logI("Skip learning: enable=$mEnableLearning, suggestion/prediction=${c.isSuggestion() || c.isPrediction()}, raw=${raw != null}")
             lastCommittedCandidate = finalCandidate.toString()
         }
 
@@ -1363,16 +1161,10 @@ class InputEngine(
 
     fun cancelPendingRequests() {
         viterbiEngine.cancelPending()
-        zenzEngine?.cancelPending()
-        jinenEngine?.cancelPending()
-        karukanEngine?.cancelPending()
     }
 
     fun release() {
         viterbiEngine.release()
-        zenzEngine?.release()
-        jinenEngine?.release()
-        karukanEngine?.release()
     }
 
     fun reset() {

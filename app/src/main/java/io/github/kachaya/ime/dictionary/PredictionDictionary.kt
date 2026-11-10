@@ -150,7 +150,7 @@ class PredictionDictionary(context: Context?) {
                     val nextPosId = cursor.getInt(2)
                     val nextCost = cursor.getInt(3)
 
-                    val c = Candidate(nextWord, nextWord, "Zenz AI")
+                    val c = Candidate(nextWord, nextWord)
                     c.type = Candidate.Type.PREDICTION
                     val we = WordEntry(nextReading, nextWord, nextPosId, nextCost)
                     we.type = Candidate.Type.PREDICTION

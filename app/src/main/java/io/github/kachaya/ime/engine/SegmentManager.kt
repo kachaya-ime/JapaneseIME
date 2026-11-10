@@ -78,11 +78,6 @@ class SegmentManager {
         val segs = segments ?: return null
         if (segs.isEmpty()) return null
 
-        val active = getActiveSegment()
-        val activeCand = active?.getSelectedCandidate()
-        if (activeCand != null && activeCand.isZenz()) {
-            return activeCand.candidate
-        }
         val sb = StringBuilder()
         for (seg in segs) {
             sb.append(seg.getSelectedSurface())

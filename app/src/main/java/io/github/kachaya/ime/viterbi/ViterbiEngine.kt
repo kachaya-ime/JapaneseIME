@@ -42,13 +42,13 @@ class ViterbiEngine(
 
         if (!isEnabled) {
             val surface = preferredSurface ?: query
-            val plainCand = Candidate(surface, surface, name)
+            val plainCand = Candidate(surface, surface)
             val wideK = RomajiConverter.toWideKatakana(query)
             val halfK = RomajiConverter.toHalfKatakana(query)
 
             val cands = mutableListOf(plainCand)
-            if (!wideK.isNullOrEmpty() && wideK != query) cands.add(Candidate(wideK, wideK, name))
-            if (!halfK.isNullOrEmpty() && halfK != query) cands.add(Candidate(halfK, halfK, name))
+            if (!wideK.isNullOrEmpty() && wideK != query) cands.add(Candidate(wideK, wideK))
+            if (!halfK.isNullOrEmpty() && halfK != query) cands.add(Candidate(halfK, halfK))
             return cands
         }
 
@@ -70,7 +70,7 @@ class ViterbiEngine(
             seen.add(preferredSurface)
             var prefCand = rawCands.find { it.candidate == preferredSurface }
             if (prefCand == null) {
-                prefCand = Candidate(preferredSurface, preferredSurface, name)
+                prefCand = Candidate(preferredSurface, preferredSurface)
             }
             if (isPlainReadingCandidate(query, preferredSurface)) {
                 plainCands.add(prefCand)

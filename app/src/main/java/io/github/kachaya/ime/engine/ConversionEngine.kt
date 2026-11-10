@@ -4,7 +4,7 @@ import io.github.kachaya.ime.dictionary.Candidate
 
 /**
  * かな・読み文字列から変換候補を生成する変換エンジンの統一インターフェースです。
- * Viterbi 統計デコーダー、Zenz LLM 推論エンジン、あるいは将来の新しい変換エンジン群を
+ * Viterbi 統計デコーダーあるいは将来の新しい変換エンジン群を
  * プラグイン的・一元的に扱うために抽象化されています。
  */
 interface ConversionEngine {
@@ -17,7 +17,7 @@ interface ConversionEngine {
     fun convertSync(query: String, preferredSurface: String? = null): List<Candidate>
 
     /**
-     * 非同期ストリーミング/バックグラウンドで変換候補を生成します（Zenz LLM など）。
+     * 非同期/バックグラウンドで変換候補を生成します。
      */
     fun convertAsync(
         query: String,

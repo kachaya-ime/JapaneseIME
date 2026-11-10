@@ -73,13 +73,13 @@ class SuggestionProvider(
                     for (key in suggestionKeys) {
                         if (requestId != suggestionRequestId.get()) return@execute
                         if (!key.isNullOrEmpty() && key != query) {
-                            val keyCand = Candidate(key, key, "Zenz AI").setType(Candidate.Type.SUGGESTION)
+                            val keyCand = Candidate(key, key).setType(Candidate.Type.SUGGESTION)
                             rawCandidates.add(keyCand)
 
                             val keyCands = dictionary.findCandidates(key)
                             if (keyCands != null) {
                                 for (c in keyCands) {
-                                    val sugCand = Candidate(c.rawCandidate, c.candidate, "Zenz AI")
+                                    val sugCand = Candidate(c.rawCandidate, c.candidate)
                                         .setType(Candidate.Type.SUGGESTION)
                                     sugCand.setEntry(c.entry)
                                     rawCandidates.add(sugCand)

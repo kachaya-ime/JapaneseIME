@@ -179,7 +179,7 @@ class ViterbiDecoder constructor(
             val fullSurface = surfaceBuilder.toString()
             if (fullSurface.isNotEmpty() && seenSurfaces.put(fullSurface, true) == null) {
                 val fullEntry = WordEntry(key, fullSurface, path.posId, path.totalCost)
-                val candidate = Candidate(fullSurface, fullSurface, "Zenz AI")
+                val candidate = Candidate(fullSurface, fullSurface)
                     .setType(if (learningDictInvolved) Candidate.Type.LEARNING else Candidate.Type.SYSTEM)
                     .setEntry(fullEntry)
                     .setViterbiPathNode(path)

@@ -244,7 +244,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
 
     override fun onFinishInputView(finishingInput: Boolean) {
         logI("onFinishInputView: finishingInput=$finishingInput")
-        mEngine?.zenzEngine?.cancelPendingRequests()
+        mEngine?.cancelPendingRequests()
         dismissStatusUI()
         super.onFinishInputView(finishingInput)
     }
@@ -252,7 +252,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
     override fun onFinishInput() {
         logI("onFinishInput()")
         super.onFinishInput()
-        mEngine?.zenzEngine?.cancelPendingRequests()
+        mEngine?.cancelPendingRequests()
         dismissStatusUI()
         hideCandidatesView()
         requestHideSelf(0)
@@ -261,7 +261,7 @@ class InputService : InputMethodService(), SharedPreferences.OnSharedPreferenceC
     override fun onWindowHidden() {
         logI("onWindowHidden()")
         super.onWindowHidden()
-        mEngine?.zenzEngine?.cancelPendingRequests()
+        mEngine?.cancelPendingRequests()
         dismissStatusUI()
     }
 

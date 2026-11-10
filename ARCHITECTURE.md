@@ -20,7 +20,6 @@ graph TD
     B -->|非同期サジェスト検索| E[SuggestionProvider]
     B -->|プラグイン変換| F[ConversionEngine (Plugin)]
     F -->|実装: Viterbi| G[ViterbiConversionEngine]
-    F -->|実装: Zenz AI| H[ZenzConversionEngine]
     B -->|確定時単語/N-gram学習| I[CandidateLearner]
     B -->|UI描画・テキスト送信| J[InputEngineUiBridge (Bridge)]
     J -->|反映| A
@@ -33,7 +32,7 @@ graph TD
 機能追加や改修を行う際の拡張ポイントと手順です。
 
 ### 2.1 変換エンジンの追加 (`ConversionEngine`)
-新しい変換エンジン（例: 他の LLM、ルールベース変換、Gemini Nano 連携など）を追加する場合：
+新しい変換エンジン（例: ルールベース変換、Gemini Nano 連携など）を追加する場合：
 1. `ConversionEngine` インターフェースを実装したクラスを作成します。
    - `convertSync(query, preferredSurface)`: 同期検索候補を返します。
    - `convertAsync(query, leftContext, callback)`: 非同期/ストリーミング推論候補をコールバックで返します。
@@ -60,12 +59,9 @@ Android 実機やエミュレータを起動せずに、`InputEngine` のロジ�
 
 ## 3. 変換エンジンと学習システム
 
-`JapaneseIME` は、統計的アプローチ（`ViterbiConversionEngine`）とオンデバイスAIアプローチ（`ZenzConversionEngine` / `llama.cpp`）を統一された `ConversionEngine` インターフェース経由で統合しています。
+`JapaneseIME` は、統計的アプローチ（`ViterbiConversionEngine`）を `ConversionEngine` インターフェース経由で実装・利用しています。
 
-### 3.1 Zenz LLM 変換と Viterbi 学習のブリッジ
-* **Zenz エンジン (`ZenzEngine` / `ZenzConversionEngine`)**:
-  - `llama.cpp` の JNI (`libzenz_engine.so`) を経由し、オンデバイスで GGUF モデル（`zenz-v3.2-xsmall.gguf` 等）を実行。
-  - ストリーミング推論により、UIスレッドをブロックせずに候補を順次反映。
+### 3.1 Viterbi 学習 (`CandidateLearner`)
 * **N-best (10〜50) Viterbi アライメント学習 (`CandidateLearner`)**:
   - ユーザーが候補を確定した際、`CandidateLearner` が Viterbi の分割パス（単語ノード群）を解析。
   - 単語・分節単位で品詞ID・コストおよび Bigram 遷移（`learnTransition`）を `LearningDictionary` / `PredictionDictionary` に学習。

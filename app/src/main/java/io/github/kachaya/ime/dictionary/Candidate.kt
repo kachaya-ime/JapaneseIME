@@ -12,17 +12,14 @@ import io.github.kachaya.ime.viterbi.ViterbiDecoder
  */
 class Candidate constructor(
     var rawCandidate: String?,
-    var candidate: String?,
-    zenzAi: String? = null
+    var candidate: String?
 ) {
     /** 候補の種類や由来を表す列挙型。 */
     enum class Type {
         SYSTEM,
         LEARNING,
         PREDICTION,
-        SUGGESTION,
-        ZENZ,
-        JINEN
+        SUGGESTION
     }
 
     /** 候補の種類・由来。 */
@@ -57,13 +54,6 @@ class Candidate constructor(
      * @return 補完候補の場合は true
      */
     fun isSuggestion(): Boolean = type == Type.SUGGESTION
-
-    /**
-     * Zenz LLM 変換候補であるかどうかを判定します。
-     *
-     * @return Zenz 候補の場合は true
-     */
-    fun isZenz(): Boolean = type == Type.ZENZ
 
     /**
      * 注釈情報（annotation）を設定します。
@@ -133,7 +123,6 @@ class Candidate constructor(
             Type.LEARNING -> " [L]"
             Type.PREDICTION -> " [P]"
             Type.SUGGESTION -> " [S]"
-            Type.ZENZ -> " [Z]"
             else -> ""
         }
     }
@@ -200,7 +189,7 @@ class CandidateLearner(private val dictionary: Dictionary) {
         for (seg in segments) {
             val selected = seg.getSelectedCandidate()
             val raw = selected?.rawCandidate
-            if (selected != null && !selected.isSuggestion() && !selected.isPrediction() && !selected.isZenz() && raw != null) {
+            if (selected != null && !selected.isSuggestion() && !selected.isPrediction() && raw != null) {
                 dictionary.addEntry(seg.reading, raw, selected.getPosId(), selected.getCost())
             }
 
